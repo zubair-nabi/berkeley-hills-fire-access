@@ -299,8 +299,17 @@ def test_licence_file_exists_and_matches_the_readme():
     assert lic.exists(), "no LICENSE file, so the repo is all rights reserved"
     text = lic.read_text()
     assert "MIT License" in text
-    assert "City of Berkeley" in text, "the licence does not carve out the City's data"
-    assert "OpenStreetMap" in text, "the licence does not mention the ODbL data"
+    # Nothing but the MIT text. GitHub's licence detector matches the whole file,
+    # so an appended note about the data made it report NOASSERTION instead of
+    # MIT, which is barely better than having no licence at all.
+    assert "City of Berkeley" not in text, (
+        "extra text in LICENSE stops GitHub identifying it; put it in NOTICE")
+
+    notice = ROOT / "NOTICE"
+    assert notice.exists(), "no NOTICE file recording the third-party data terms"
+    ntext = notice.read_text()
+    assert "City of Berkeley" in ntext and "OpenStreetMap" in ntext
+    assert "ODbL" in ntext or "Open Database" in ntext
     assert "MIT" in (ROOT / "README.md").read_text()
 
 

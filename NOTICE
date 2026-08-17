@@ -1,0 +1,26 @@
+Third-party data in this repository
+===================================
+
+The MIT licence in LICENSE covers the code. It does not cover the data, which is
+redistributed here under the terms of whoever produced it.
+
+City of Berkeley
+----------------
+  build/streets_raw.json.gz    street centreline network
+  build/data.json              fire zones, hazard zones, stations, chipper areas,
+                               narrow streets, street geometry
+  build/council_districts.json council district boundaries
+
+Retrieved from the City's public ArcGIS server at gis.cityofberkeley.info and
+redistributed under whatever terms the City publishes it. The City is the
+authority on all of it; where this repository disagrees with them, they are right.
+
+OpenStreetMap
+-------------
+  build/osm_roads.json.gz      road network used only as an independent check
+
+(c) OpenStreetMap contributors, available under the Open Database Licence (ODbL).
+https://www.openstreetmap.org/copyright
+
+Basemap tiles rendered by OpenFreeMap from OpenStreetMap data. Terrain elevation
+from Mapzen and AWS Open Data.

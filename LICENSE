@@ -19,14 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This licence covers the code in this repository.
-
-It does not cover the underlying map data, which belongs to the City of Berkeley
-and is redistributed here under whatever terms the City publishes it: the
-snapshots in build/streets_raw.json.gz, build/data.json and
-build/council_districts.json came from gis.cityofberkeley.info. Nor does it cover
-build/osm_roads.json.gz, which is derived from OpenStreetMap and is subject to
-the Open Database License, © OpenStreetMap contributors.

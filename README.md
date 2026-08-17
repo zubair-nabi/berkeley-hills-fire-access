@@ -328,6 +328,6 @@ yardstick to keep a number green is the opposite of what it is for.
 
 ## Licence
 
-MIT, in `LICENSE`. That covers the code only. The map data belongs to the City of
-Berkeley and carries its own terms, and `build/osm_roads.json.gz` is derived from
-OpenStreetMap under the ODbL, © OpenStreetMap contributors.
+MIT, in `LICENSE`, covering the code only. The data terms are in `NOTICE`: the map
+layers belong to the City of Berkeley, and `build/osm_roads.json.gz` comes from
+OpenStreetMap under the ODbL.
