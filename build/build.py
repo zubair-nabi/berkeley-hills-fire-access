@@ -85,6 +85,19 @@ def main() -> int:
             st["t"], st["k"] = v[0], v[1]
             timed += 1
         st.pop("i", None)
+    # The City's traffic diverters. Drawn whether or not the analysis could use
+    # them: 48 of them it cannot, and a resident who sees a diverter at their own
+    # corner knows exactly what it does, which is knowledge this page lacks.
+    bp = HERE / "barriers_placed.json"
+    if not bp.exists():
+        print("error: build/barriers_placed.json missing, run build/deadends.py first",
+              file=sys.stderr)
+        return 1
+    data["barriers"] = json.loads(bp.read_text())
+    data["meta"]["barriersCut"] = sum(1 for b in data["barriers"] if b["effect"] == "cut")
+    data["meta"]["barriersUnmodelled"] = sum(
+        1 for b in data["barriers"] if b["effect"] == "unmodelled")
+
     data["meta"]["sb99Minutes"] = dt["sb99Minutes"]
     data["meta"]["streetsTimed"] = timed
 
@@ -104,6 +117,9 @@ def main() -> int:
     print(f"  OSM verdicts: {counts['ok']} confirmed, {counts['disputed']} disputed, "
           f"{counts['none']} not checkable")
     print(f"  drive times on {timed} of {len(data['streets'])} display segments")
+    print(f"  barriers {len(data['barriers'])}: "
+          f"{data['meta']['barriersCut']} cut, "
+          f"{data['meta']['barriersUnmodelled']} at junctions not modelled")
     print(f"wrote index.html  {len(out):,} bytes")
     for k, v in sorted((k, len(v)) for k, v in data.items() if isinstance(v, list)):
         print(f"  {k:<12} {v:>6,}")

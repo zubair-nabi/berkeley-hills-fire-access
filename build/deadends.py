@@ -308,18 +308,12 @@ def apply_barriers(adj, edges, pos, barriers):
     placed = []
 
     for bar in barriers:
-        if bar["cat"] not in CLOSING:
-            placed.append({**bar, "where": "not closing", "effect": "none"})
-            continue
         bx, by = bar["x"] * MX, bar["y"] * MY
 
-        dn = min((math.hypot(lo * MX - bx, la * MY - by) for lo, la in pos.values()),
-                 default=float("inf"))
-        if dn <= BARRIER_NODE_M:
-            placed.append({**bar, "where": "junction", "effect": "unmodelled"})
-            continue
-
-        best_i, ds = None, float("inf")
+        # Nearest street, and its compass bearing, for every barrier including the
+        # ones that are never cut. The map draws a bar ACROSS the road it closes,
+        # so it needs to know which way the road runs.
+        best_i, ds, brg, street = None, float("inf"), None, ""
         for i, e in enumerate(edges):
             if e is None:
                 continue
@@ -333,6 +327,20 @@ def apply_barriers(adj, edges, pos, barriers):
                 d = math.hypot(bx - (ax + t * dx), by - (ay + t * dy))
                 if d < ds:
                     ds, best_i = d, i
+                    brg = math.degrees(math.atan2(dx, dy)) % 180
+                    street = e[2]["name"]
+        bar = {**bar, "rot": None if brg is None else round(brg, 1), "s": street}
+
+        if bar["cat"] not in CLOSING:
+            placed.append({**bar, "where": "not closing", "effect": "none"})
+            continue
+
+        dn = min((math.hypot(lo * MX - bx, la * MY - by) for lo, la in pos.values()),
+                 default=float("inf"))
+        if dn <= BARRIER_NODE_M:
+            placed.append({**bar, "where": "junction", "effect": "unmodelled"})
+            continue
+
         if best_i is not None and ds <= BARRIER_SEG_M:
             a, b, s_ = edges[best_i]
             adj[a].discard(b)
@@ -534,6 +542,8 @@ def main() -> int:
     berk.sort(key=lambda a: -a["metres"])
     out = HERE / "deadends.json"
     out.write_text(json.dumps(berk, separators=(",", ":")))
+    (HERE / "barriers_placed.json").write_text(
+        json.dumps(info["placed"], separators=(",", ":")))
     print(f"\nwrote {out.name}: {len(berk)} Berkeley single-exit areas")
     print(f"  total street length behind a single exit: "
           f"{sum(a['metres'] for a in berk) / 1000:.1f} km")

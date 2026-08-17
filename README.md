@@ -69,6 +69,7 @@ Everything comes from layers the City of Berkeley publishes openly, via
 | CalFire severity zones | `Planning/Accela/32`, very high only | 1 |
 | Landslide zones | `Planning/Land_Use_Planning/11` | 79 |
 | Alquist-Priolo fault zones | `Planning/Land_Use_Planning/13` | 3 |
+| Traffic diverters | `Police/PublicSafety/23` | 87 (60 circles excluded) |
 | Chipper areas | `Parks/FireFuel_Chipper_Areas/0` | 8 |
 | Fire stations | `Public/Portal_CommSvcs/2` | 7 |
 | Building footprints | fetched per neighbourhood on search | |
@@ -84,6 +85,7 @@ Both snapshots are reproducible from source:
 ```
 python3 build/harvest_streets.py   # the regional network -> streets_raw.json
 python3 build/harvest_layers.py    # everything else      -> data.json
+python3 build/harvest_barriers.py  # traffic diverters    -> barriers.json
 ```
 
 `build/data.json` had no harvest script until now and could not be refreshed or
@@ -239,6 +241,12 @@ Cutting them recovers exactly one neighbourhood the City's study lists, Laurel S
 and costs nothing: no area disappears and no area appears that KLD does not list.
 Agreement moves from 61% to 62%.
 
+All 87 are drawn on the map regardless, as a bar across the road, because the 48
+the analysis cannot use are the ones most worth showing. This page cannot say what
+a barrier does to your routes; the person who drives through it every day can.
+Clicking one says so plainly rather than leaving the reader to assume the page
+knew and agreed.
+
 The other 48 sit at junctions and are not modelled, for the reason in the limits
 below. An earlier attempt claimed the effect was orientation-free, on the argument
 that a diverter blocks the through movements and leaves the turns. That is wrong,
@@ -322,7 +330,7 @@ python3 build/drivetime.py         # drive time from each station -> drivetime.j
 python3 build/compare_kld.py -v    # compare against the City's SB 99 study
 python3 build/build.py             # assemble index.html (needs verdicts.json)
 python3 build/districts.py         # regenerate the council district table
-python3 -m pytest tests/           # 52 tests
+python3 -m pytest tests/           # 62 tests
 ```
 
 CI runs the tests on every push and fails if `deadends.json` or `index.html` are

@@ -409,3 +409,31 @@ def test_reader_facing_distances_are_imperial(built):
     assert "function ft(m)" in built
     # feet below a thousand, miles above, so nothing reads as "0.05 miles"
     assert '3.28084' in built and '1609.344' in built
+
+
+def test_all_barriers_are_drawn_including_the_unusable_ones(built):
+    """48 of the 87 cannot be modelled, and those are the ones most worth showing:
+    the page cannot say what they do to your routes, and the person who drives
+    through one every day can."""
+    m = re.search(r"const DATA\s*=\s*(\{.*?\});", built, re.S)
+    data = json.loads(m.group(1))
+    bars = data["barriers"]
+    assert len(bars) == 87, f"expected 87 barriers in the page, got {len(bars)}"
+    assert data["meta"]["barriersCut"] == 7
+    assert data["meta"]["barriersUnmodelled"] == 48
+    # every one needs an orientation, or the bar cannot sit across the road
+    assert all(b.get("rot") is not None for b in bars), "a barrier has no bearing"
+    assert 'id:"barlayer"' in built
+    assert '"icon-rotation-alignment":"map"' in built, (
+        "the bar must rotate with the map or it will not cross the street")
+
+
+def test_the_barrier_popup_admits_what_it_cannot_say(built):
+    """An unmodelled barrier must say so where a reader sees it, not only in a
+    repository file."""
+    # The template wraps these across source lines, so compare on collapsed
+    # whitespace rather than the raw file.
+    flat = " ".join(built.split())
+    assert "This page does not use it" in flat
+    assert "records no orientation" in flat
+    assert "Numbered barriers can generally be opened" in flat

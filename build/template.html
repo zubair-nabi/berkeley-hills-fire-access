@@ -738,6 +738,19 @@ const SVG_HOME=`<svg xmlns="http://www.w3.org/2000/svg" width="132" height="240"
   </g>
 </svg>`;
 
+/* A bar drawn across the road, which is the convention every transport map uses
+   and needs no legend to read. Full spans the street, half spans one side, so the
+   symbol is the shape of the thing. Rotated to the street's own bearing on the
+   map, which is why deadends.py records one for all 87. */
+const SVG_BAR_FULL=`<svg xmlns="http://www.w3.org/2000/svg" width="112" height="56" viewBox="0 0 56 28">
+  <rect x="4" y="10" width="48" height="9" rx="1.6" fill="#0E0E0C"/>
+  <rect x="4" y="10" width="48" height="9" rx="1.6" fill="none" stroke="#F5F1E8" stroke-width="1.6"/>
+</svg>`;
+const SVG_BAR_HALF=`<svg xmlns="http://www.w3.org/2000/svg" width="112" height="56" viewBox="0 0 56 28">
+  <rect x="16" y="10" width="24" height="9" rx="1.6" fill="#0E0E0C"/>
+  <rect x="16" y="10" width="24" height="9" rx="1.6" fill="none" stroke="#F5F1E8" stroke-width="1.6"/>
+</svg>`;
+
 function addIcon(map,name,svg,w,h){
   return new Promise(res=>{
     const img=new Image(w,h);
@@ -752,7 +765,9 @@ async function loadIcons(map){
     /* These must match the svg's own width and height. pin-home was being handed
        140x148 for a 132x240 drawing, so it rasterised short and landed on the map
        smaller than the dead end signs it was supposed to stand out from. */
-    addIcon(map,"pin-home",SVG_HOME,132,240)]);}
+    addIcon(map,"pin-home",SVG_HOME,132,240),
+    addIcon(map,"bar-full",SVG_BAR_FULL,112,56),
+    addIcon(map,"bar-half",SVG_BAR_HALF,112,56)]);}
 
 /* maplibre 4.7.1 does not know symbol-z-elevate. It does not throw on it either: the
    layer is accepted and then silently dropped, which is how three marker layers went
@@ -847,6 +862,7 @@ function initMap(x,y,st,apn){
     <div class="toggles">
       <button class="tg on" data-l="bldglayer,minelayer"><i style="background:#C9BFAC"></i>Buildings</button>
       <button class="tg on" data-l="delayer,deline,deglow"><i style="background:#FFCC00"></i>One way out</button>
+      <button class="tg" data-l="barlayer"><i style="background:#0E0E0C"></i>Road barriers</button>
       <button class="tg" data-l="narrowlayer"><i style="background:#7A2E9E"></i>Narrow streets</button>
       <button class="tg" data-l="hazlayer,hazline"><i style="background:#8A5A2B"></i>Landslide &amp; fault</button>
       <button class="tg" data-l="chiplayer,chipline"><i style="background:#00875A"></i>Chipper areas</button>
@@ -862,6 +878,11 @@ function initMap(x,y,st,apn){
         <b>Disputed</b><span>Drawn as a broken line. OpenStreetMap, surveyed independently of the City,
         records more than one way out of these. Eight of the 138 are in this state. Nobody has checked
         them on the ground.</span></div>
+      <div><i class="sw" style="background:#0E0E0C"></i>
+        <b>Road barrier</b><span>A bar drawn across the road where the City records a traffic
+        diverter. Full width closes the street, half width closes one side. 48 of the 87 sit at
+        junctions where the City publishes no orientation, so this page shows them without using
+        them.</span></div>
       <div><i class="sw" style="background:#7A2E9E"></i>
         <b>Narrow street</b><span>On the City's published narrow-streets list. The City's evacuation study
         found most streets in the Hillside Overlay are under 26 feet wide, which is what stops a fire engine
@@ -971,6 +992,20 @@ function initMap(x,y,st,apn){
         "text-anchor":"top","text-offset":[0,.3],"text-optional":true,
         "text-transform":"uppercase","text-letter-spacing":.06},
       paint:{"text-color":"#7A5E00","text-halo-color":"#F5F1E8","text-halo-width":1.6}});
+    /* Every barrier, not only the ones the analysis could use. The 48 at
+       junctions are exactly the ones worth showing: the page cannot tell what
+       they do to your routes, and the person who drives through one daily can. */
+    MAP.addSource("bar",{type:"geojson",data:fc((DATA.barriers||[]).map(b=>({type:"Feature",
+      properties:{cat:b.cat,rot:b.rot||0,s:b.s||"",fire:b.fire==null?"":String(b.fire),
+                  eff:b.effect,where:b.where},
+      geometry:{type:"Point",coordinates:[b.x,b.y]}})))});
+    addLayerSafe(MAP,{id:"barlayer",type:"symbol",source:"bar",
+      layout:{"icon-image":["match",["get","cat"],"full","bar-full","bar-half"],
+        "icon-rotate":["get","rot"],"icon-rotation-alignment":"map",
+        "icon-allow-overlap":true,"icon-ignore-placement":true,
+        "icon-size":["interpolate",["linear"],["zoom"],13,.22,15,.38,18,.72],
+        "symbol-sort-key":2},
+      paint:{"icon-opacity":["match",["get","cat"],"full",1,.72]}});
     MAP.addSource("st",{type:"geojson",data:fc(DATA.stations.map(s=>({type:"Feature",
       properties:{n:s.name,a:s.addr},geometry:{type:"Point",coordinates:[s.x,s.y]}})))});
     addLayerSafe(MAP,{id:"stlayer",type:"symbol",source:"st",
@@ -1040,7 +1075,25 @@ function initMap(x,y,st,apn){
            may open in an emergency, and a private drive may connect where the map shows nothing.</div>`
       ).addTo(MAP);});
 
-    for(const lyr of ["stlayer","delayer"]){
+    MAP.on("click","barlayer",e=>{
+      const f=e.features[0], c=f.geometry.coordinates.slice(), p=f.properties;
+      const what = p.cat==="full" ? "closes this street to through traffic"
+                 : p.cat==="half" ? "closes one side of this street"
+                 : `is recorded as "${esc(p.cat)}"`;
+      pop.setLngLat(c).setHTML(
+        `<div class="pt">Traffic diverter${p.s?" on "+esc(p.s):""}</div>
+         <div class="pa">The City records a barrier here that ${what}.</div>
+         ${p.eff==="unmodelled"
+           ? `<div class="pw">This page does not use it. The City's layer records no
+                orientation, so which way a diagonal barrier faces is unknown, and
+                guessing would invent dead ends. You know what it does; this page does not.</div>`
+           : p.eff==="cut"
+           ? `<div class="pd">Counted as a closure in the streets above.</div>` : ""}
+         ${p.fire?`<div class="pd">Fire Department barrier number ${esc(p.fire)}. Numbered
+             barriers can generally be opened in an emergency.</div>`:""}`
+      ).addTo(MAP);});
+
+    for(const lyr of ["stlayer","delayer","barlayer"]){
       MAP.on("mouseenter",lyr,()=>MAP.getCanvas().style.cursor="pointer");
       MAP.on("mouseleave",lyr,()=>MAP.getCanvas().style.cursor="");}
   });}
