@@ -189,9 +189,9 @@ def test_disputed_areas_are_not_drawn_as_solid(built):
 #
 # The old lookup pushed the whole query into a single LIKE, so one wrong token
 # returned nothing at all and the reader was left guessing which part was wrong.
-# "1532 Olympus Ave", "3102 Dana St", "9th St" and "78 Fairlawn Drive" all failed
+# "1532 Olympus Ave", "3102 Dana St", "9th St" and "3000 Shasta Road" all failed
 # against addresses the City records as OLYMPUS AV, DANA ST, NINTH ST and
-# FAIRLAWN DR.
+# SHASTA RD.
 
 def test_lookup_matches_on_tokens_not_the_whole_string(built):
     assert "function whereFor" in built
@@ -238,6 +238,14 @@ def test_input_fills_its_wrapper(built):
     a 426 px input above a 120 px suggestion list."""
     assert ".acwrap{position:relative;flex:1 1 320px;min-width:0}" in built
     assert "#addr{width:100%;box-sizing:border-box" in built
+
+
+def test_example_address_is_not_a_private_home(built):
+    """The placeholder is the one address every visitor sees. It used to be a
+    real resident's house, on a public page, beside a personal repository."""
+    assert "Fairlawn" not in built, (
+        "a private home is being used as the worked example")
+    assert "Shasta" in built, "the example address is missing"
 
 
 def test_intro_copy_matches_the_current_model(built):
