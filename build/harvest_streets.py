@@ -3,7 +3,7 @@
 
     python3 build/harvest_streets.py
 
-Writes build/streets_raw.json.
+Writes build/streets_raw.json.gz.
 
 Fetch the WHOLE layer, including Oakland, Albany and Kensington. This matters more
 than it looks. The layer is regional, and an earlier version of this project
@@ -32,6 +32,7 @@ The fields fetched are the ones the derivation needs:
                          service area, not by distance as the crow flies
 """
 
+import gzip
 import json
 import pathlib
 import sys
@@ -88,8 +89,14 @@ def main() -> int:
     if len(feats) != total:
         print(f"warning: fetched {len(feats)}, layer reported {total}", file=sys.stderr)
 
-    out = HERE / "streets_raw.json"
-    out.write_text(json.dumps({"features": feats}, separators=(",", ":")))
+    # Written straight to the gzip that everything else reads. An earlier version
+    # wrote a plain .json and left recompressing as a manual step; adding
+    # FT_MINUTES then updated the plain file only, so local builds used the new
+    # fields and CI used the stale archive and produced different drive times. One
+    # artefact, no manual step, no way for the two to diverge.
+    out = HERE / "streets_raw.json.gz"
+    with gzip.open(out, "wt") as fh:
+        json.dump({"features": feats}, fh, separators=(",", ":"))
     print(f"wrote {out.name}  {out.stat().st_size:,} bytes  {len(feats)} segments")
     return 0
 

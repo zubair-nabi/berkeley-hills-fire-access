@@ -290,7 +290,7 @@ where an arbitrary choice would flip the count. The Redistricting layer's
 `index.html` is generated. Edit `build/template.html`, not `index.html`.
 
 ```
-python3 build/harvest_streets.py   # only to refresh from the City, writes streets_raw.json
+python3 build/harvest_streets.py   # only to refresh from the City, writes streets_raw.json.gz
 python3 build/deadends.py          # derive single-exit areas -> deadends.json
 python3 build/deadends.py --sweep  # the stability check, by hand
 python3 build/validate_osm.py      # cross-check, writes verdicts.json
@@ -298,7 +298,7 @@ python3 build/drivetime.py         # drive time from each station -> drivetime.j
 python3 build/compare_kld.py -v    # compare against the City's SB 99 study
 python3 build/build.py             # assemble index.html (needs verdicts.json)
 python3 build/districts.py         # regenerate the council district table
-python3 -m pytest tests/           # 46 tests
+python3 -m pytest tests/           # 49 tests
 ```
 
 CI runs the tests on every push and fails if `deadends.json` or `index.html` are

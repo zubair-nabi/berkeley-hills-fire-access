@@ -3,7 +3,7 @@
 
     python3 build/deadends.py [--sweep]
 
-Reads build/streets_raw.json, writes build/deadends.json.
+Reads build/streets_raw.json.gz, writes build/deadends.json.
 
 WHAT IS BEING COMPUTED, AND WHY IT IS NOT "DEAD ENDS"
 
@@ -81,15 +81,12 @@ TRUNK = ("HIGHWAY", "RAMP")
 
 
 def load_segments():
-    # The gzipped snapshot is what is committed; 14 MB of JSON compresses to 4.5.
-    # The plain file is used when present so a fresh harvest can be tested without
-    # a recompress step.
-    plain = HERE / "streets_raw.json"
-    if plain.exists():
-        raw = json.loads(plain.read_text())["features"]
-    else:
-        with gzip.open(HERE / "streets_raw.json.gz", "rt") as fh:
-            raw = json.load(fh)["features"]
+    # The committed gzip is the only source. Preferring a plain streets_raw.json
+    # when present meant a local run and CI could read different data, which is
+    # exactly what happened when FT_MINUTES was added: local builds saw it, CI did
+    # not, and the drive times silently disagreed.
+    with gzip.open(HERE / "streets_raw.json.gz", "rt") as fh:
+        raw = json.load(fh)["features"]
     segs = []
     for f in raw:
         g = f.get("geometry") or {}

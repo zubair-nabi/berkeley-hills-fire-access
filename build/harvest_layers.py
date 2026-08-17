@@ -194,13 +194,9 @@ def main() -> int:
     print(f"    {len(data['narrow'])} segments in Berkeley of {len(nr)} regional")
 
     print("street geometry for display")
-    raw_path = HERE / "streets_raw.json"
-    if raw_path.exists():
-        raw = json.loads(raw_path.read_text())["features"]
-    else:
-        import gzip
-        with gzip.open(HERE / "streets_raw.json.gz", "rt") as fh:
-            raw = json.load(fh)["features"]
+    import gzip
+    with gzip.open(HERE / "streets_raw.json.gz", "rt") as fh:
+        raw = json.load(fh)["features"]
     streets = []
     for f in raw:
         a = f["attributes"]

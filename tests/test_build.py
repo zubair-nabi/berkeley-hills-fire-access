@@ -243,3 +243,48 @@ def test_input_fills_its_wrapper(built):
 def test_intro_copy_matches_the_current_model(built):
     """The page computes single-exit areas, not dead-end streets."""
     assert "dead-end streets around you" not in built
+
+
+def test_snapshot_carries_the_fields_the_pipeline_needs():
+    """The committed archive is the only input, so it must hold every field the
+    derivations read.
+
+    FT_MINUTES was added to the harvester and written to a plain streets_raw.json
+    while the committed gzip stayed stale. Local builds read the plain file and
+    saw the new field; CI read the archive and did not, so the two produced
+    different drive times and only the reproducibility gate noticed.
+    """
+    import gzip
+    path = BUILD / "streets_raw.json.gz"
+    assert path.exists(), "the street snapshot is missing"
+    with gzip.open(path, "rt") as fh:
+        feats = json.load(fh)["features"]
+    assert len(feats) > 6000, f"snapshot has only {len(feats)} segments"
+    attrs = feats[0]["attributes"]
+    for field in ("OBJECTID", "FULLNAME", "MUNILEFT", "F_ZLEV", "ROADCLASS",
+                  "ONEWAYDIR", "FT_MINUTES", "TF_MINUTES", "METERS", "SPEED"):
+        assert field in attrs, f"{field} missing from the committed snapshot"
+
+
+def test_nothing_reads_an_uncompressed_snapshot():
+    """One artefact, so a local run and CI cannot read different data."""
+    for script in ("deadends.py", "harvest_layers.py"):
+        src = (BUILD / script).read_text()
+        assert 'HERE / "streets_raw.json"' not in src, (
+            f"{script} still prefers a plain streets_raw.json, which lets local "
+            f"builds and CI diverge")
+
+
+def test_drive_times_are_present_and_sane(built):
+    """Reads the built page, not data.json: the drive times are joined on at build
+    time and deliberately never written back to the snapshot, so the snapshot
+    stays exactly what the City served."""
+    m = re.search(r"const DATA\s*=\s*(\{.*?\});", built, re.S)
+    data = json.loads(m.group(1))
+    timed = [s for s in data["streets"] if "t" in s]
+    assert len(timed) > 3000, f"only {len(timed)} segments carry a drive time"
+    for s in timed:
+        assert 0 <= s["t"] < 30, f"implausible drive time {s['t']} on {s['s']}"
+        assert 0 <= s["k"] < len(data["stations"]), "drive time names no real station"
+    worst = max(s["t"] for s in timed)
+    assert worst < 15, f"worst Berkeley drive time is {worst} min, expected under 15"
