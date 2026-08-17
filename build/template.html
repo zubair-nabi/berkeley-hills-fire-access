@@ -233,8 +233,8 @@ and how far the nearest fire station is.</p>
 <ul class="srclist">
   <li><b>Fire zones and hazards</b> Hill Fire Zones, CalFire Very High Fire Hazard Severity Zone,
     landslide and Alquist-Priolo fault zones, from the City's ArcGIS server.</li>
-  <li><b>Streets and dead ends</b> City street centrelines. Dead ends are worked out from where a street
-    terminates, then filtered to named roads.</li>
+  <li><b>Streets and single-exit areas</b> City street centrelines for the whole region, not just
+    Berkeley. An area is a part of the network that reaches everywhere else through one junction.</li>
   <li><b>Buildings</b> The City's building footprint layer, fetched for your neighbourhood when you
     search. Your own building is matched by parcel number.</li>
   <li><b>Addresses</b> The City's 62,090 published address points.</li>
@@ -253,10 +253,11 @@ and how far the nearest fire station is.</p>
   <div class="drow"><b>Never use it in an emergency.</b> Call <b>911</b>. Follow the Fire Department and
     the County's emergency alerts. Nothing here is an evacuation plan, an evacuation route, or a judgment
     that anywhere is safe. It is a way to read published maps before anything happens, and that is all.</div>
-  <div class="drow"><b>It is probably wrong in places.</b> Dead ends are worked out from street centrelines
-    and have not been checked on the ground, so some are driveways or service roads, and a street shown as
-    a dead end may have a gate that opens in an emergency. Distances are straight lines, not driving
-    distances. Map layers are a snapshot and the City updates them on its own schedule.</div>
+  <div class="drow"><b>It is probably wrong in places.</b> Single-exit areas are worked out from street
+    centrelines and have not been checked on the ground. Where the City's data has a hole, a through
+    street can look like it has one exit, and where a private drive or a gate connects, an area may have
+    a second way out the map cannot see. Distances are straight lines, not driving distances. Map layers
+    are a snapshot and the City updates them on its own schedule.</div>
   <div class="drow"><b>No warranty.</b> Provided as-is, with no guarantee that it is accurate, current, or
     fit for any purpose. Use it at your own risk. The author accepts no liability for any loss or damage
     arising from its use, to the extent the law allows.</div>
@@ -286,6 +287,29 @@ function pip(x,y,rings){let ins=false;
 const R=6371000;
 function metres(a,b,c,d){const p=Math.PI/180,dy=(d-b)*p,dx=(c-a)*p*Math.cos((b+d)/2*p);
   return Math.round(Math.sqrt(dy*dy+dx*dx)*R);}
+
+/* An address this close to an area's streets is treated as being on one of them.
+   City address points sit at the building, set back from the centreline, and a
+   deep lot on a wide street can be 40 m off it. */
+const INSIDE_M=45;
+
+/* Distance from a point to the nearest point of any segment in an area, measured
+   against the segments rather than their endpoints. A long block would otherwise
+   read as far away from its own middle. */
+function areaDist(x,y,a){
+  const p=Math.PI/180, MX=111320*Math.cos(y*p), MY=110574;
+  const px=x*MX, py=y*MY;
+  let best=Infinity;
+  for(const path of a.paths){
+    for(let i=0;i<path.length-1;i++){
+      const ax=path[i][0]*MX,   ay=path[i][1]*MY;
+      const bx=path[i+1][0]*MX, by=path[i+1][1]*MY;
+      const dx=bx-ax, dy=by-ay, L=dx*dx+dy*dy;
+      const t=L===0?0:Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/L));
+      const qx=ax+t*dx, qy=ay+t*dy;
+      const d=Math.hypot(px-qx,py-qy);
+      if(d<best) best=d;}}
+  return Math.round(best);}
 
 async function fetchT(url,ms=9000){
   const r=await fetch(url,{signal:AbortSignal.timeout(ms)});
@@ -330,15 +354,20 @@ function diagram(cx,cy,st){
     g+=`<polyline points="${s.p.map(p=>X(p[0]).toFixed(1)+","+Y(p[1]).toFixed(1)).join(" ")}"
          fill="none" stroke="#0E0E0C" stroke-opacity=".30" stroke-width="1.6"
          stroke-linecap="round" stroke-linejoin="round"/>`;}
-  // dead-end terminations
-  const near=[];
-  for(const d of DATA.deadEnds){
-    if(!inView(d.x,d.y)) continue;
-    const px=X(d.x),py=Y(d.y); near.push(d);
-    g+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="5.5" fill="#EE3F12"
+  // single-exit areas: the streets behind the junction, then the junction itself
+  for(const a of DATA.areas){
+    if(!inView(a.exit[0],a.exit[1])) continue;
+    for(const path of a.paths)
+      g+=`<polyline points="${path.map(p=>X(p[0]).toFixed(1)+","+Y(p[1]).toFixed(1)).join(" ")}"
+           fill="none" stroke="#C88A00" stroke-width="3.4"
+           stroke-linecap="round" stroke-linejoin="round"/>`;}
+  for(const a of DATA.areas){
+    if(!inView(a.exit[0],a.exit[1])) continue;
+    const px=X(a.exit[0]),py=Y(a.exit[1]);
+    g+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="5.5" fill="#FFCC00"
          stroke="#0E0E0C" stroke-width="1.6"/>`;
-    if(d.s) g+=`<text x="${(px+9).toFixed(1)}" y="${(py+3.5).toFixed(1)}" font-size="10.5"
-         font-family="Azeret Mono,monospace" fill="#45443C">${esc(d.s)}</text>`;}
+    if(a.names[0]) g+=`<text x="${(px+9).toFixed(1)}" y="${(py+3.5).toFixed(1)}" font-size="10.5"
+         font-family="Azeret Mono,monospace" fill="#45443C">${esc(a.names[0])}</text>`;}
   // fire station, if it happens to be in frame
   if(inView(st.x,st.y)){
     g+=`<rect x="${(X(st.x)-6).toFixed(1)}" y="${(Y(st.y)-6).toFixed(1)}" width="12" height="12"
@@ -357,13 +386,14 @@ function diagram(cx,cy,st){
         <text x="${(barPx/2).toFixed(1)}" y="-9" font-size="10.5" text-anchor="middle"
          font-family="Azeret Mono,monospace" fill="#45443C">200 m</text></g>`;
   return `<div class="diagram"><svg viewBox="0 0 ${W} ${H}" role="img"
-      aria-label="Street network around the address, with dead ends marked."><rect width="${W}" height="${H}" fill="#F6F5EE"/>${g}</svg></div>
+      aria-label="Street network around the address, with single-exit areas marked."><rect width="${W}" height="${H}" fill="#F6F5EE"/>${g}</svg></div>
     <div class="legend">
       <span><i style="background:#D6FF2E;border:2px solid #0E0E0C;border-radius:50%"></i>this address</span>
-      <span><i style="background:#EE3F12;border:2px solid #0E0E0C;border-radius:50%"></i>dead end</span>
+      <span><i style="background:#FFCC00;border:2px solid #0E0E0C;border-radius:50%"></i>single exit</span>
       <span><i style="background:#00875A;border:2px solid #0E0E0C"></i>fire station</span>
       <span><i style="background:#EE3F12;opacity:.25"></i>hill fire zone 2 or 3</span>
-      <span>${near.length} dead end${near.length===1?"":"s"} in view</span>
+      <span>${DATA.areas.filter(a=>inView(a.exit[0],a.exit[1])).length} single-exit area${
+        DATA.areas.filter(a=>inView(a.exit[0],a.exit[1])).length===1?"":"s"} in view</span>
     </div>`;}
 
 function render(feat){
@@ -373,8 +403,13 @@ function render(feat){
   const vh=inAny(x,y,DATA.hazards.calfireVHFHSZ);
   const ls=inAny(x,y,DATA.hazards.landslide);
   const fa=inAny(x,y,DATA.hazards.fault);
-  const near=DATA.deadEnds.map(d=>({d,m:metres(x,y,d.x,d.y)})).filter(o=>o.m<=400)
-              .sort((a,b)=>a.m-b.m).slice(0,6);
+  /* Distance from the address to the closest point of an area's streets, not to
+     its exit. Living at the far end of Panoramic Way puts you 1.5 km from the
+     exit while standing squarely inside the area, and a distance-to-exit test
+     would report that you are nowhere near one. */
+  const areasBy=DATA.areas.map(a=>({a,m:areaDist(x,y,a)})).sort((p,q)=>p.m-q.m);
+  const inside=areasBy.filter(o=>o.m<=INSIDE_M);
+  const near=areasBy.filter(o=>o.m>INSIDE_M && o.m<=400).slice(0,5);
   const st=DATA.stations.map(s=>({s,m:metres(x,y,s.x,s.y)})).sort((a,b)=>a.m-b.m)[0];
   const tag=(on,onTxt,offTxt,cls)=>on?`<span class="tag ${cls}">${onTxt}</span>`:`<span class="tag none">${offTxt}</span>`;
 
@@ -391,11 +426,21 @@ function render(feat){
       tag(ls,"Within","not within","warn")}</span></div>
     <div class="fact"><span class="k">Earthquake fault zone</span><span class="v">${
       tag(fa,"Alquist Priolo","not within","warn")}</span></div>
-    <div class="fact"><span class="k">Dead ends within 400m</span><span class="v">${
-      near.length ? `<b>${near.length}</b>${
-        near.length===6?" or more":""}<ul class="de">${near.map(o=>
-        `<li>${esc(o.d.s)}${o.d.b?`, ${esc(o.d.b)}`:""} · ${o.m} m${o.d.z?` · zone ${o.d.z}`:""}</li>`).join("")}</ul>`
-      : "none found in the street centreline data"}</span></div>
+    <div class="fact"><span class="k">Ways out</span><span class="v">${
+      inside.length
+      ? `<span class="tag hot">One</span> your street is inside an area that reaches
+         the rest of Berkeley through a single junction.
+         <ul class="de">${inside.slice(0,2).map(o=>
+           `<li><b>${esc(o.a.names.slice(0,3).join(", "))}</b>${
+             o.a.names.length>3?` and ${o.a.names.length-3} more`:""}
+            · ${(o.a.metres/1000).toFixed(o.a.metres>=1000?1:2)} km of street behind that one junction</li>`).join("")}</ul>`
+      : `<span class="tag ok">More than one</span> your street reaches the rest of
+         Berkeley by more than one route.`}</span></div>
+    <div class="fact"><span class="k">Single-exit areas within 400m</span><span class="v">${
+      near.length ? `<b>${near.length}</b><ul class="de">${near.map(o=>
+        `<li>${esc(o.a.names.slice(0,2).join(", "))} · ${o.m} m · ${
+          o.a.metres} m of street behind one junction</li>`).join("")}</ul>`
+      : "none within 400 m"}</span></div>
     <div class="fact"><span class="k">Nearest fire station</span><span class="v">${
       esc(st.s.name)}, ${esc(st.s.addr)} · <b>${st.m} m</b> in a straight line</span></div>
     <div id="mapwrap"></div>
@@ -407,9 +452,9 @@ function render(feat){
     <div class="note">The map draws no route and never will. Terrain is exaggerated slightly so slope
       reads; it is the reason hill roads are narrow and winding, which is what the City's studies are
       about. Straight-line distance is not drive time, and the SB 99 definition of an access impaired
-      neighbourhood depends on a 5-minute drive-time service area. A dead end shown here has not been
-      verified on the ground and may have a barrier that opens in an emergency. Read the City's studies
-      before drawing any conclusion.</div>
+      neighbourhood depends on a 5-minute drive-time service area. Nothing here has been verified on the
+      ground, and a barrier or private drive can change the answer. Read the City's studies before
+      drawing any conclusion.</div>
   </div>`;
   initMap(x,y,st.s,feat.attributes.APN);
   $("#after").hidden=false;
@@ -650,7 +695,7 @@ function initMap(x,y,st,apn){
   wrap.innerHTML=`<div id="map"></div>
     <div class="toggles">
       <button class="tg on" data-l="bldglayer,minelayer"><i style="background:#C9BFAC"></i>Buildings</button>
-      <button class="tg on" data-l="delayer"><i style="background:#FFCC00"></i>Dead ends</button>
+      <button class="tg on" data-l="delayer,deline,deglow"><i style="background:#FFCC00"></i>One way out</button>
       <button class="tg" data-l="narrowlayer"><i style="background:#7A2E9E"></i>Narrow streets</button>
       <button class="tg" data-l="hazlayer,hazline"><i style="background:#8A5A2B"></i>Landslide &amp; fault</button>
       <button class="tg" data-l="chiplayer,chipline"><i style="background:#00875A"></i>Chipper areas</button>
@@ -659,8 +704,9 @@ function initMap(x,y,st,apn){
     </div>
     <div class="legend2">
       <div><i class="sw" style="background:#FFCC00;border-color:#0E0E0C"></i>
-        <b>Dead end</b><span>A street that only connects to the network at one end. If yours is one,
-        everyone on it leaves the same way you do.</span></div>
+        <b>One way out</b><span>An area that reaches the rest of Berkeley through a single junction.
+        Everyone behind it leaves through that one point. The sign marks the junction and the gold
+        streets are what is behind it.</span></div>
       <div><i class="sw" style="background:#7A2E9E"></i>
         <b>Narrow street</b><span>On the City's published narrow-streets list. The City's evacuation study
         found most streets in the Hillside Overlay are under 26 feet wide, which is what stops a fire engine
@@ -732,8 +778,27 @@ function initMap(x,y,st,apn){
       layout:{visibility:"none"},paint:{"fill-color":"#8A5A2B","fill-opacity":.22}});
     addLayerSafe(MAP,{id:"hazline",type:"line",source:"haz",
       layout:{visibility:"none"},paint:{"line-color":"#8A5A2B","line-width":1.4,"line-opacity":.6}});
-    MAP.addSource("de",{type:"geojson",data:fc(DATA.deadEnds.map(d=>({type:"Feature",
-      properties:{s:d.s,b:d.b,z:d.z||""},geometry:{type:"Point",coordinates:[d.x,d.y]}})))});
+    /* The area itself is the finding, so the area is what gets drawn. A marker
+       alone said "something is wrong here" without saying how much is behind it,
+       which is the number that matters. The streets are painted, and the sign
+       goes at the junction they all funnel through. */
+    MAP.addSource("dearea",{type:"geojson",data:fc(DATA.areas.flatMap(a=>
+      a.paths.map(p=>({type:"Feature",
+        properties:{s:a.names[0]||"",n:a.names.slice(0,3).join(", "),m:a.metres},
+        geometry:{type:"LineString",coordinates:p}}))))});
+    addLayerSafe(MAP,{id:"deglow",type:"line",source:"dearea",
+      layout:{"line-cap":"round","line-join":"round"},
+      paint:{"line-color":"#FFCC00","line-opacity":.55,
+             "line-width":["interpolate",["linear"],["zoom"],12,3,15,11,18,26],
+             "line-blur":["interpolate",["linear"],["zoom"],12,2,18,10]}});
+    addLayerSafe(MAP,{id:"deline",type:"line",source:"dearea",
+      layout:{"line-cap":"round","line-join":"round"},
+      paint:{"line-color":"#C88A00",
+             "line-width":["interpolate",["linear"],["zoom"],12,1,15,3,18,7]}});
+    MAP.addSource("de",{type:"geojson",data:fc(DATA.areas.map(a=>({type:"Feature",
+      properties:{s:a.names[0]||"",n:a.names.slice(0,3).join(", "),m:a.metres,
+                  seg:a.segments,b:(a.blocks||[])[0]||""},
+      geometry:{type:"Point",coordinates:a.exit}})))});
     addLayerSafe(MAP,{id:"delayer",type:"symbol",source:"de",
       layout:{"icon-image":"pin-deadend","icon-anchor":"bottom","icon-allow-overlap":false,
         "icon-size":["interpolate",["linear"],["zoom"],12,.28,15,.42,18,.6],
@@ -801,11 +866,12 @@ function initMap(x,y,st,apn){
     MAP.on("click","delayer",e=>{
       const f=e.features[0], c=f.geometry.coordinates.slice(), p=f.properties;
       pop.setLngLat(c).setHTML(
-        `<div class="pt">${esc(p.s||"Unnamed road")}</div>
-         <div class="pa">${p.b?esc(p.b)+" · ":""}road with one exit</div>
-         <div class="pd">${dist(c[0],c[1])} from your address, straight line${p.z?" · hill fire zone "+esc(p.z):""}</div>
+        `<div class="pt">${esc(p.n||p.s||"Unnamed road")}</div>
+         <div class="pa">${p.m>=1000?(p.m/1000).toFixed(1)+" km":p.m+" m"} of street
+           across ${p.seg} segment${p.seg==1?"":"s"} leaves through this junction</div>
+         <div class="pd">${dist(c[0],c[1])} from your address, straight line</div>
          <div class="pn">Derived from street centrelines and not checked on the ground. A gate or bollard
-           here may open in an emergency.</div>`
+           may open in an emergency, and a private drive may connect where the map shows nothing.</div>`
       ).addTo(MAP);});
 
     for(const lyr of ["stlayer","delayer"]){
@@ -863,23 +929,27 @@ $("#addr").addEventListener("keydown",e=>{if(e.key==="Enter") run();});
 if(location.hash.length>1){
   const a=decodeURIComponent(location.hash.slice(1));
   $("#addr").value=a; setTimeout(run,60);}
-$("#s1").textContent=DATA.meta.berkeleyNamedRoadDeadEnds;
-$("#s2").textContent=DATA.meta.inHillZone2or3;
-$("#s3").textContent=DATA.meta.segments.toLocaleString();
+/* There is no #s1/#s2/#s3 in this page. Three lines here read them anyway and
+   threw on the first null, which killed the rest of the script and left the
+   footer below permanently blank. The counts belong in the footer prose, which
+   is interpolated from meta and cannot drift. */
 $("#foot").innerHTML=`<b style="color:var(--ink);display:block;margin-bottom:8px;
     font-family:Bricolage Grotesque,sans-serif;font-size:15px;letter-spacing:-.01em">How this works, and where it falls short</b>
   Everything here is computed from map layers the City of Berkeley publishes: fire zones, landslide and
   fault zones, fire stations, street centrelines and ${DATA.meta.segments.toLocaleString()} street
-  segments, retrieved ${DATA.meta.generated}. Dead ends are worked out from where street centrelines
-  terminate, which found ${DATA.meta.berkeleyNamedRoadDeadEnds} across Berkeley,
-  ${DATA.meta.inHillZone2or3} of them in hill fire zones 2 and 3.
-  Another ${DATA.meta.boundaryTerminationsDropped} were thrown out. The City's street data stops at
-  the city line, so a street that carries on into Albany or Oakland looks like it ends. Shattuck and
-  Solano both came up that way and neither is a dead end.<br><br>
-  <b style="color:var(--ink)">Three things it gets wrong.</b> A dead end here has not been checked on the
-  ground, so some are service roads or driveways rather than streets. It cannot see gates or bollards that
-  open in an emergency, so a street shown as a dead end may have a second way out. And distance to a fire
-  station is a straight line, not a drive.<br><br>
+  segments, retrieved ${DATA.meta.generated}.<br><br>
+  <b style="color:var(--ink)">What "one way out" means here.</b> The street network is built as a graph
+  and searched for junctions that everything behind them has to pass through. Berkeley has
+  ${DATA.meta.singleExitAreas} such areas, with
+  ${(DATA.meta.metresBehindSingleExit/1000).toFixed(1)} km of street behind them. This is not the same
+  as counting streets with one end. A cul-de-sac drawn with a turning circle has no loose end at all,
+  and a whole neighbourhood can hang off one junction without a single street in it looking like a dead
+  end. Panoramic Way is the largest here: 4.5 km of road reaching the rest of Berkeley through one
+  junction.<br><br>
+  <b style="color:var(--ink)">Three things it gets wrong.</b> Nothing here has been checked on the
+  ground, so a gate, a bollard or a private drive can add a way out the map cannot see. Where the City's
+  centreline data has a hole, a through street can look like it has one exit; the top of Marin Ave is a
+  known case. And distance to a fire station is a straight line, not a drive.<br><br>
   The City's own engineering studies are the real record: Access Impaired Neighborhood Analysis (SB 99) and
   Evacuation Route Safety, Capacity, and Viability Analysis (AB 747), both by KLD Engineering, early 2024.
   Basemap © OpenStreetMap contributors, tiles by OpenFreeMap, elevation Mapzen/AWS.

@@ -1,9 +1,9 @@
 # Berkeley hills fire access
 
 A map of the things that decide how fast you can get out of the Berkeley hills, and
-how fast a fire engine can get in: dead-end streets, streets too narrow for an engine
-to pass a car coming down, the Hill Fire Zones, landslide and fault zones, chipper
-drop areas, and the fire stations.
+how fast a fire engine can get in: which streets have one way out, which are too
+narrow for an engine to pass a car coming down, the Hill Fire Zones, landslide and
+fault zones, chipper drop areas, and the fire stations.
 
 Type an address, get the answer for that address.
 
@@ -16,31 +16,6 @@ never will.
 One self-contained HTML file. No server, no build step at request time, no tracking,
 no network calls except the map tiles and the City's own ArcGIS server. Open it from
 a USB stick if you like. It prints.
-
-## Status: not ready to publish
-
-The dead-end layer, which is the whole point of the page, still contains false
-positives beyond the boundary artifacts described below. University Ave appears six
-times. California St, Cedar St, Virginia St, Hilgard Ave, Northside Ave, West St and
-North St are all still flagged, and none of them is a dead end.
-
-The likely cause is the snapping tolerance in the graph build. Where the City splits a
-centreline at an intersection, a bridge, or a one-way pair and the two endpoints do not
-land within tolerance, they never share a node and both sides read as degree 1. That is
-testable by sweeping the tolerance, which needs the harvest script that was not kept.
-
-An attempt to measure the error rate against OpenStreetMap was abandoned because the
-test was not stable: across reasonable choices of the exclusion radius, the acceptance
-cone, and whether `highway=service` is excluded, the count of genuine dead ends moved
-between 29 and 77 out of the same 156. That is a heuristic, not a measurement, and no
-number from it appears anywhere in this repo or on the page.
-
-Do not enable GitHub Pages or circulate the link until the dead-end count stops moving.
-Putting a dead-end sign on a through street is the one failure that would cost this
-page its standing with the Fire Department, and it contradicts the page's own footer.
-
-Everything else holds: the boundary correction is deterministic geometry rather than a
-tuned heuristic, and the rest of the layers come straight from the City.
 
 ## Why
 
@@ -56,6 +31,28 @@ know about their own street has to read a report and squint at a map.
 
 The inputs are all public. This computes the per-address answer from them.
 
+## What "one way out" means here
+
+Not "a street with one end". That is a different thing and it is the wrong thing.
+
+The network is built as a graph and searched for **articulation points**: junctions
+that everything behind them has to pass through. Whatever sits behind one is a
+single-exit area, and the junction is its exit.
+
+Counting streets with one end gets it wrong in both directions:
+
+- **It over-counts.** One cul-de-sac digitised as three stubs counts three times.
+  Arcade Ln did exactly that.
+- **It under-counts, which is worse.** A cul-de-sac with a turning circle is a loop
+  and has no loose end at all. And a whole neighbourhood can hang off a single
+  junction without one street in it looking like a dead end. That is the SB 99
+  access-impaired case, the reason this page exists, and a loose-end count cannot
+  see it.
+
+Berkeley has **138 single-exit areas** holding **24.1 km of street**. The largest is
+Panoramic Way: 4.5 km of road across 40 segments, reaching the rest of the city
+through one junction. A loose-end count scored it zero.
+
 ## Data
 
 Everything comes from layers the City of Berkeley publishes openly, via
@@ -63,9 +60,8 @@ Everything comes from layers the City of Berkeley publishes openly, via
 
 | Layer | Source | Count |
 | --- | --- | --- |
-| Street centrelines | `Public/Streets` | 6,971 segments |
-| Dead ends | derived, see below | 156 named roads |
-| City boundary | `Public/Portal_Planning/8` | 1 polygon |
+| Street network | `Planning/Accela/3` | 6,971 segments, regional |
+| Single-exit areas | derived, see below | 138 |
 | Narrow streets | City's published narrow-streets list | 882 segments |
 | Hill Fire Zones 2 and 3 | `Planning` | 3 polygons |
 | CalFire severity zones | State FRAP, via the City | |
@@ -75,87 +71,104 @@ Everything comes from layers the City of Berkeley publishes openly, via
 | Building footprints | fetched per neighbourhood on search | |
 | Address points | 62,090 published points | |
 
-Data snapshot in `build/data.json` was harvested 2026-08-16.
+The street layer is a routable network, not just geometry. It carries jurisdiction
+per segment (`MUNILEFT`/`MUNIRIGHT`), grade separation (`F_ZLEV`/`T_ZLEV`), road
+class, one-way direction and pavement width. The derivation uses all of those
+instead of guessing at them geometrically.
 
-### How dead ends are worked out
+Snapshot in `build/streets_raw.json.gz`, harvested 2026-08-16.
 
-The street network is built as a graph from the centreline segments, endpoints snapped
-to a tolerance so that segments meeting at a junction share a node. Any node with
-degree 1 is a termination. Terminations are then filtered to named roads, which drops
-driveways, service spurs, and paper streets.
+## How the derivation works, and what went wrong three times
 
-That gives 253 raw terminations. 97 of them are then dropped as boundary artifacts,
-leaving **156**, of which **82** are in Hill Fire Zone 2 or 3.
+Each of these shipped. Each is now a test.
 
-### Why 97 terminations are thrown away
+**The network was filtered to Berkeley before the graph was built.** The layer is
+regional. Cutting it to Berkeley first severed every street at the city line, so
+Shattuck, Solano, Marin and Peralta all came out as cul-de-sacs. The graph is now
+built on the whole region and Berkeley is selected from the *results*.
+Guarded by `test_graph_is_regional`.
 
-The centreline layer is clipped at the city boundary. A street that carries on into
-Albany or Oakland therefore appears to stop, the degree-1 test sees a termination, and
-it gets called a dead end. Shattuck Ave, Solano Ave, Marin Ave and Peralta Ave all came
-up this way. None of them is a dead end.
+**Segments were dropped by name keyword.** A filter removing names containing PATH,
+TRAIL, STEPS or WALK also removed Walker St and Fountain Walk. Fountain Walk is a
+`MAJOR` road forming the south portal of the Northbrae Tunnel, so dropping it severed
+the tunnel and made Solano Ave single-exit. Drivability now comes from `ROADCLASS`
+alone, which already classes the real footpaths as `PEDESTRIAN`.
+Guarded by `test_real_roads_named_like_paths_are_kept`.
 
-The distribution makes the cause unambiguous. 59 terminations fall outside the
-boundary; 53 of those sit within 25 m of the line and 52 within 1 m. Only one (Rugby
-Ave, 145 m) is properly inside another jurisdiction. A further 38 sit *inside* the
-boundary but under 25 m from it, which is the same artifact landing a metre on the
-Berkeley side: Ninth St, Second St, Alcatraz Ave, Roanoke Rd. So the test is distance
-to the line, not inside versus outside, and both conditions are applied.
+**Loose ends were counted as dead ends.** Replaced with articulation-point analysis,
+described above. Guarded by `test_panoramic_way_is_found`.
 
-Three of the 97 fell in a hill fire zone, where wrongly dropping a real cul-de-sac would
-actually cost a resident something, so each was checked against OpenStreetMap, which is
-not clipped at the city line:
+Three repairs run before the analysis:
 
-- **Ajax Ln** is `highway=path` in OSM, not a road, and runs through to Ajax Place at both ends.
-- **Chabolyn Ter** terminates at a three-way junction; the streets it joins are Oakland's.
-- **Vicente Rd** continues a further 319 m past the point Berkeley's data stops.
+- **Portal repair.** Keying nodes by z-level is what stops an overpass reading as a
+  junction, but it also severs a tunnel wherever the data omits the transition
+  segment. At a true overpass both levels carry through traffic; at a broken portal
+  the severed side has degree 1. Only the latter is merged.
+- **Gap bridging.** The centreline has holes at rail crossings and divided roadways.
+  Two loose ends of the same street within 90 m are two sides of one hole. University
+  Ave produced four false areas of 85 to 89 m before this.
+- **Missing-junction join.** A loose end within 22 m of another street's node is an
+  unrecorded junction, not a cul-de-sac head.
 
-All three connect or continue exactly where Berkeley's data ends, so nothing genuine is
-lost. A termination on the edge of a clipped dataset carries no information in either
-direction, and publishing "we cannot tell" as a dead-end marker would be the guesswork
-this page says it does not do.
+### The test that matters most
 
-The clip runs on every build, in `build/build.py`, against `build/city_boundary.json`.
-`build/data.json` is the untouched harvest, so the rule can be inspected and argued with
-rather than being baked invisibly into the data.
+The previous derivation's answer moved between 29 and 77 depending on how the
+validator was tuned. An answer that moves with an arbitrary parameter is not a
+measurement, and that instability was the only reliable signal that it was wrong.
+
+The current one is checked for exactly that. Across snap tolerances from 1 m to 8 m
+the count stays at 137 or 138. `test_count_is_stable_across_snap_tolerance` fails the
+build if the spread exceeds 10%.
+
+```
+snap  1.0 m   areas 301   Berkeley 137
+snap  2.0 m   areas 302   Berkeley 138
+snap  4.0 m   areas 302   Berkeley 138
+snap  8.0 m   areas 300   Berkeley 137
+```
 
 ### By council district
 
-Of the 156:
-
 | District | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Dead ends | 28 | 24 | 2 | 4 | 15 | **52** | 9 | 22 |
+| Single-exit areas | 28 | 24 | 2 | 4 | 15 | **52** | 9 | 22 |
 
-District 6, the hills, has more than any other. Note that the Redistricting layer's
-`CouncilMember` field is out of date, so this uses district numbers only.
+Counted on the superseded loose-end set and not yet recomputed against the 138.
+The shape is right and the exact figures are not; treat them as indicative until
+rerun. The Redistricting layer's `CouncilMember` field is also out of date, so this
+uses district numbers only.
 
 ### Known limits
 
-These matter and are not hidden in the page either.
-
-- **A termination is not always a cul-de-sac.** Where the centreline data splits a
-  turning circle into several stubs, one physical dead end can be counted more than
-  once. Arcade Ln is the clearest case.
-- **A dead end here has not been checked on the ground** and may have a barrier or a
-  path that opens in an emergency.
-- **Straight-line distance is not drive time.** The station distance shown is
-  as-the-crow-flies. SB 99's definition of an access impaired neighbourhood depends on
-  a five-minute drive-time service area, which is a different and harder calculation.
+- **Nothing is checked on the ground.** A gate, bollard or private drive can add a
+  way out the map cannot see.
+- **The top of Marin Ave is wrong.** The centreline has a 126 m hole there and Marin
+  reports as single-exit when it is a through street. Bridging 126 m would wire
+  genuine cul-de-sacs into whatever street runs behind them, so it is not worth one
+  area in 138. Tracked as a strict `xfail` so it fails the build if it silently
+  changes.
+- **Straight-line distance is not drive time.** SB 99's access-impaired definition
+  depends on a five-minute drive-time service area, which is a harder calculation.
 - **Buildings are drawn at a uniform height** because the City's footprint layer
   carries none. Terrain is exaggerated 1.5x so slope reads.
-- The harvest script that produced `build/data.json` was not kept. The endpoints above
-  are enough to reproduce it, but it needs rewriting before the data can be refreshed.
+- **Only the street layer has a harvest script.** The other layers in
+  `build/data.json` predate it and cannot yet be refreshed from source.
 
 ## Build
 
 `index.html` is generated. Edit `build/template.html`, not `index.html`.
 
 ```
-python3 build/build.py
+python3 build/harvest_streets.py   # only to refresh from the City, writes streets_raw.json
+python3 build/deadends.py          # derive single-exit areas -> deadends.json
+python3 build/deadends.py --sweep  # the stability check, by hand
+python3 build/build.py             # assemble index.html
+python3 -m pytest tests/           # 22 tests, 1 known xfail
 ```
 
-The template carries a `/*__DATA__*/ null` placeholder; the build substitutes
-`build/data.json` into it and writes `index.html`.
+CI runs the tests on every push and fails if `deadends.json` or `index.html` are
+stale with respect to their inputs. It reads the committed snapshot and never calls
+the City's server, so a refresh is always a deliberate, reviewable commit.
 
 ## Licence
 

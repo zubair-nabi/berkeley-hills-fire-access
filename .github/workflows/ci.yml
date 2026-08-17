@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install pytest
+
+      # Runs against the committed snapshot in build/streets_raw.json.gz, so CI
+      # never touches the City's ArcGIS server. A refresh is a deliberate act:
+      # run build/harvest_streets.py, recompress, and commit the result, so the
+      # diff shows exactly what changed in the City's data.
+      - name: tests
+        run: python -m pytest tests/ -v
+
+      - name: derivation is reproducible
+        run: |
+          python build/deadends.py
+          git diff --exit-code --stat build/deadends.json \
+            || (echo "::error::deadends.json is stale, run build/deadends.py and commit"; exit 1)
+
+      - name: page is reproducible
+        run: |
+          python build/build.py
+          git diff --exit-code --stat index.html \
+            || (echo "::error::index.html is stale, run build/build.py and commit"; exit 1)
