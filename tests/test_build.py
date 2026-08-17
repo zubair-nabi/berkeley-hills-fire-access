@@ -387,3 +387,24 @@ def test_result_region_is_announced(built):
     """A sighted user sees the card appear. Someone using a screen reader gets
     nothing unless the region announces itself."""
     assert 'id="out" role="status" aria-live="polite"' in built
+
+
+def test_reader_facing_distances_are_imperial(built):
+    """Everything is computed in metres because the geometry and the City's own
+    travel times are metric. Nobody in Berkeley thinks in metres.
+
+    The page shipped reporting "415 m in a straight line" and "24.1 km of street"
+    while, three paragraphs away, describing streets as "under 26 feet wide". The
+    conversion belongs at the point of display and only there.
+    """
+    import re
+    body = built[built.find("<body"):]
+    body = re.sub(r"<script[\s\S]*?</script>", "", body)
+    leaks = [" ".join(m.group(0).split()) for m in
+             re.finditer(r"[^<>]{0,40}\b\d[\d,.]*\s?(m|km|metres|meters)\b[^<>]{0,20}", body)]
+    assert not leaks, f"metric units in reader-facing copy: {leaks[:4]}"
+
+    assert "function dist(m)" in built, "no imperial display formatter"
+    assert "function ft(m)" in built
+    # feet below a thousand, miles above, so nothing reads as "0.05 miles"
+    assert '3.28084' in built and '1609.344' in built

@@ -353,9 +353,14 @@ function driveAt(x,y){
 /* Distance from a point to the nearest point of any segment in an area, measured
    against the segments rather than their endpoints. A long block would otherwise
    read as far away from its own middle. */
-/* 49 m read as "0.05 km" because the formatter always divided by 1000. Metres
-   below a kilometre, kilometres above it. */
-function km(m){ return m>=1000 ? (m/1000).toFixed(1)+" km" : m+" m"; }
+/* Everything here is computed in metres, because the geometry and the City's own
+   travel times are metric. Nobody in Berkeley thinks in metres, so the conversion
+   happens at the point of display and only there. The page already said "26 feet
+   wide" in one place while reporting kilometres in another. */
+function ft(m){ return Math.round(m*3.28084); }
+function dist(m){
+  const f=ft(m);
+  return f<1000 ? Math.round(f/10)*10+" ft" : (m/1609.344).toFixed(1)+" miles"; }
 
 function areaDist(x,y,a){
   const p=Math.PI/180, MX=111320*Math.cos(y*p), MY=110574;
@@ -520,7 +525,7 @@ function render(feat){
   const ls=inAny(x,y,DATA.hazards.landslide);
   const fa=inAny(x,y,DATA.hazards.fault);
   /* Distance from the address to the closest point of an area's streets, not to
-     its exit. Living at the far end of Panoramic Way puts you 1.5 km from the
+     its exit. Living at the far end of Panoramic Way puts you a mile from the
      exit while standing squarely inside the area, and a distance-to-exit test
      would report that you are nowhere near one. */
   const areasBy=DATA.areas.map(a=>({a,m:areaDist(x,y,a)})).sort((p,q)=>p.m-q.m);
@@ -555,22 +560,22 @@ function render(feat){
          <ul class="de">${inside.slice(0,2).map(o=>
            `<li><b>${esc(o.a.names.slice(0,3).join(", "))}</b>${
              o.a.names.length>3?` and ${o.a.names.length-3} more`:""}
-            · ${km(o.a.metres)} of street behind that one junction</li>`).join("")}</ul>`
+            · ${dist(o.a.metres)} of street behind that one junction</li>`).join("")}</ul>`
       : `<span class="tag ok">More than one</span> your street reaches the rest of
          Berkeley by more than one route.`}</span></div>
-    <div class="fact"><span class="k">Single-exit areas within 400m</span><span class="v">${
+    <div class="fact"><span class="k">Single-exit areas within a quarter mile</span><span class="v">${
       near.length ? `<b>${near.length}</b><ul class="de">${near.map(o=>
-        `<li>${esc(o.a.names.slice(0,2).join(", "))} · ${o.m} m away · ${
-          km(o.a.metres)} of street behind one junction${
+        `<li>${esc(o.a.names.slice(0,2).join(", "))} · ${dist(o.m)} away · ${
+          dist(o.a.metres)} of street behind one junction${
           o.a.v==="disputed"?' <span class="q">disputed</span>':""}</li>`).join("")}</ul>`
       : "none within 400 m"}</span></div>
     <div class="fact"><span class="k">Nearest fire station</span><span class="v">${(()=>{
       const dr=driveAt(x,y);
-      if(!dr) return `${esc(st.s.name)}, ${esc(st.s.addr)} · <b>${st.m} m</b> in a straight line`;
+      if(!dr) return `${esc(st.s.name)}, ${esc(st.s.addr)} · <b>${dist(st.m)}</b> in a straight line`;
       const s2=DATA.stations[dr.station]||st.s;
       return `${esc(s2.name)}, ${esc(s2.addr)} · <b>${dr.min.toFixed(1)} min</b> by road`
         + `<div class="sub2">Along the streets at posted speeds and clear roads, which is an engine
-             on its way to you, not you driving out through traffic. ${st.m} m in a straight line.
+             on its way to you, not you driving out through traffic. ${dist(st.m)} in a straight line.
              ${dr.min<=DATA.meta.sb99Minutes
                ? `Inside the ${DATA.meta.sb99Minutes}-minute fire station service area.`
                : `Outside the ${DATA.meta.sb99Minutes}-minute fire station service area.`}</div>`;
@@ -1007,8 +1012,7 @@ function initMap(x,y,st,apn){
     const dist=(lng,lat)=>{
       const R=6371000,p=Math.PI/180;
       const dy=(lat-y)*p, dx=(lng-x)*p*Math.cos((lat+y)/2*p);
-      const m=Math.round(Math.sqrt(dy*dy+dx*dx)*R);
-      return m>=1000 ? (m/1000).toFixed(1)+" km" : m+" m";};
+      return dist(Math.round(Math.sqrt(dy*dy+dx*dx)*R));};
 
     MAP.on("click","stlayer",e=>{
       const f=e.features[0], c=f.geometry.coordinates.slice(), p=f.properties;
@@ -1026,7 +1030,7 @@ function initMap(x,y,st,apn){
       const f=e.features[0], c=f.geometry.coordinates.slice(), p=f.properties;
       pop.setLngLat(c).setHTML(
         `<div class="pt">${esc(p.n||p.s||"Unnamed road")}</div>
-         <div class="pa">${km(p.m)} of street
+         <div class="pa">${dist(p.m)} of street
            across ${p.seg} segment${p.seg==1?"":"s"} leaves through this junction</div>
          <div class="pd">${dist(c[0],c[1])} from your address, straight line</div>
          ${p.v==="disputed"
@@ -1172,10 +1176,10 @@ $("#foot").innerHTML=`<b style="color:var(--ink);display:block;margin-bottom:8px
   <b style="color:var(--ink)">What "one way out" means here.</b> The street network is built as a graph
   and searched for junctions that everything behind them has to pass through. Berkeley has
   ${DATA.meta.singleExitAreas} such areas, with
-  ${(DATA.meta.metresBehindSingleExit/1000).toFixed(1)} km of street behind them. This is not the same
+  ${(DATA.meta.metresBehindSingleExit/1609.344).toFixed(0)} miles of street behind them. This is not the same
   as counting streets with one end. A cul-de-sac drawn with a turning circle has no loose end at all,
   and a whole neighbourhood can hang off one junction without a single street in it looking like a dead
-  end. Panoramic Way is the largest here: 4.5 km of road reaching the rest of Berkeley through one
+  end. Panoramic Way is the largest here: 2.8 miles of road reaching the rest of Berkeley through one
   junction.<br><br>
   <b style="color:var(--ink)">What counts as a way out.</b> Public streets only. Driveways, parking
   aisles, service roads and fire trails are not counted, on the view that a gated fire road is not a way
