@@ -142,10 +142,11 @@ def test_hazard_layers_are_populated(data):
     assert len(h["calfireVHFHSZ"]) >= 1, "CalFire very high severity zone missing"
 
 
-def test_distances_read_as_metres_below_a_kilometre(built):
-    """49 m rendered as "0.05 km" because the formatter always divided by 1000."""
-    assert "function km(m)" in built
-    assert 'm>=1000 ? (m/1000).toFixed(1)+" km" : m+" m"' in built
+def test_small_distances_do_not_render_as_a_fraction_of_a_big_unit(built):
+    """49 m once rendered as "0.05 km" because the formatter always divided by
+    1000. The same trap exists in imperial, so the threshold is asserted rather
+    than assumed: feet below a thousand, miles above."""
+    assert 'f<1000 ? Math.round(f/10)*10+" ft"' in built
 
 
 # --- disagreements reach the reader -----------------------------------------
