@@ -79,6 +79,18 @@ JOIN_M = 22.0
 # extract, which makes it look single-exit when it is only unfinished.
 TRUNK = ("HIGHWAY", "RAMP")
 
+# A barrier this close to a junction is taken to sit at it; further away it sits
+# mid-block. 48 of the 55 full diverters are at junctions and 7 are mid-block, and
+# the two need completely different treatment.
+BARRIER_NODE_M = 20.0
+BARRIER_SEG_M = 18.0
+
+# Only these actually close a street to through traffic. "half" is deliberately
+# absent: it blocks one direction, the layer records no orientation, and this
+# graph is undirected, so cutting on a half diverter could remove a way out that
+# is really a way in. It is drawn on the map and excluded from the analysis.
+CLOSING = ("full",)
+
 
 def load_segments():
     # The committed gzip is the only source. Preferring a plain streets_raw.json
@@ -265,6 +277,77 @@ def build_graph(segs, snap_m):
     return adj, edges, pos
 
 
+def apply_barriers(adj, edges, pos, barriers):
+    """Close streets where the City records a traffic diverter.
+
+    ONLY MID-BLOCK CLOSURES ARE MODELLED, and the reason is worth writing down
+    because the obvious approach fails silently.
+
+    A full closure mid-block severs the street. That is unambiguous: drop the edge.
+    Seven of the 55 full diverters are this case.
+
+    The other 48 sit at junctions, and this data cannot say what they do. A
+    diagonal diverter physically partitions the four legs into two pairs, {N,E}
+    with {S,W} or {N,W} with {S,E}, and WHICH pair depends on which diagonal the
+    barrier runs along. ROTATION is empty on all 87 records, so we cannot tell.
+
+    An earlier version of this function claimed the effect was orientation-free:
+    block the through movements, keep every turn, and the answer comes out the
+    same either way. That is wrong, and wrong in a way that produced no error and
+    no change in the output. Connecting the legs pairwise for every legal turn
+    leaves N reachable from S by way of E, so the expansion was a no-op: it added
+    122 nodes, 48 junctions, and changed the area count by zero. Verified by
+    checking that every leg of an expanded junction still reached every other.
+
+    So they are recorded and drawn, and they are not cut. Claiming a closure whose
+    direction we cannot determine would invent single-exit areas, which is the one
+    error this project exists to avoid. Publishing ROTATION would fix it, and that
+    is a specific thing to ask the City for.
+    """
+    cut = 0
+    placed = []
+
+    for bar in barriers:
+        if bar["cat"] not in CLOSING:
+            placed.append({**bar, "where": "not closing", "effect": "none"})
+            continue
+        bx, by = bar["x"] * MX, bar["y"] * MY
+
+        dn = min((math.hypot(lo * MX - bx, la * MY - by) for lo, la in pos.values()),
+                 default=float("inf"))
+        if dn <= BARRIER_NODE_M:
+            placed.append({**bar, "where": "junction", "effect": "unmodelled"})
+            continue
+
+        best_i, ds = None, float("inf")
+        for i, e in enumerate(edges):
+            if e is None:
+                continue
+            pts = e[2]["pts"]
+            for k in range(len(pts) - 1):
+                ax, ay = pts[k][0] * MX, pts[k][1] * MY
+                cx, cy = pts[k + 1][0] * MX, pts[k + 1][1] * MY
+                dx, dy = cx - ax, cy - ay
+                L = dx * dx + dy * dy
+                t = 0.0 if L == 0 else max(0.0, min(1.0, ((bx - ax) * dx + (by - ay) * dy) / L))
+                d = math.hypot(bx - (ax + t * dx), by - (ay + t * dy))
+                if d < ds:
+                    ds, best_i = d, i
+        if best_i is not None and ds <= BARRIER_SEG_M:
+            a, b, s_ = edges[best_i]
+            adj[a].discard(b)
+            adj[b].discard(a)
+            edges[best_i] = None
+            cut += 1
+            placed.append({**bar, "where": "mid-block", "effect": "cut"})
+        else:
+            placed.append({**bar, "where": "off-network", "effect": "none"})
+
+    kept = [e for e in edges if e is not None]
+    unmodelled = sum(1 for p in placed if p["effect"] == "unmodelled")
+    return adj, kept, pos, {"cut": cut, "unmodelled": unmodelled, "placed": placed}
+
+
 def articulation_points(adj):
     """Hopcroft-Tarjan, iterative so a long street cannot blow the stack."""
     disc, low, parent = {}, {}, {}
@@ -413,16 +496,26 @@ def single_exit_areas(adj, edges, pos, min_core):
     return kept, arts
 
 
-def run(snap_m, min_core=200, quiet=False):
+def load_barriers():
+    path = HERE / "barriers.json"
+    return json.loads(path.read_text()) if path.exists() else []
+
+
+def run(snap_m, min_core=200, quiet=False, barriers=True):
     segs = load_segments()
     adj, edges, pos = build_graph(segs, snap_m)
+    info = {"cut": 0, "expanded": 0, "placed": []}
+    if barriers:
+        adj, edges, pos, info = apply_barriers(adj, edges, pos, load_barriers())
     areas, arts = single_exit_areas(adj, edges, pos, min_core)
     berk = [a for a in areas if "Berkeley" in a["muni"]]
     if not quiet:
         print(f"snap {snap_m:>4.1f} m   nodes {len(adj):>5}   edges {len(edges):>5}   "
               f"articulation pts {len(arts):>4}   areas {len(areas):>4}   "
-              f"Berkeley {len(berk):>4}")
-    return berk, segs, areas
+              f"Berkeley {len(berk):>4}"
+              + (f"   barriers {info['cut']} cut, {info['unmodelled']} at junctions "
+                 f"not modelled" if barriers else "   no barriers"))
+    return berk, segs, areas, info
 
 
 def main() -> int:
@@ -437,7 +530,7 @@ def main() -> int:
             run(t)
         return 0
 
-    berk, segs, areas = run(SNAP_M)
+    berk, segs, areas, info = run(SNAP_M)
     berk.sort(key=lambda a: -a["metres"])
     out = HERE / "deadends.json"
     out.write_text(json.dumps(berk, separators=(",", ":")))

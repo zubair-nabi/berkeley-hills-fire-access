@@ -228,6 +228,26 @@ because no home fronts them.
 
 `test_agrees_with_the_city_consultants` fails below 55%.
 
+### Traffic diverters
+
+`Police/PublicSafety/23` holds 147 records: 87 diverters and 60 traffic circles.
+The circles are dropped, since a roundabout calms traffic rather than stopping you
+driving through it. Of the 87, 55 fully close a street.
+
+Seven of those 55 sit mid-block, where a closure unambiguously severs the street.
+Cutting them recovers exactly one neighbourhood the City's study lists, Laurel St,
+and costs nothing: no area disappears and no area appears that KLD does not list.
+Agreement moves from 61% to 62%.
+
+The other 48 sit at junctions and are not modelled, for the reason in the limits
+below. An earlier attempt claimed the effect was orientation-free, on the argument
+that a diverter blocks the through movements and leaves the turns. That is wrong,
+and it failed silently: connecting the legs pairwise for every legal turn leaves
+the north leg reachable from the south by way of the east, so the whole expansion
+was a no-op that added 122 nodes and changed the answer by zero. It was caught by
+checking whether every leg of an expanded junction still reached every other one,
+which it did.
+
 ### Drive time, not straight-line distance
 
 The page used to report distance to the nearest station as a straight line while
@@ -277,9 +297,13 @@ where an arbitrary choice would flip the count. The Redistricting layer's
 
 - **Nothing is checked on the ground.** A gate, bollard or private drive can add a
   way out the map cannot see.
-- **Barriers are invisible here.** A bollard, gate or diverter can make a block a
-  cul-de-sac for cars while the centreline runs through it. KLD found 21 such
-  neighbourhoods in Berkeley; this page can find none of them.
+- **48 of the City's 87 traffic diverters cannot be modelled.** They sit at
+  junctions, where a diagonal barrier splits the four legs into two pairs, and
+  which pair depends on which diagonal it runs along. `ROTATION` is empty on all
+  87 records. They are drawn on the map and excluded from the analysis, because
+  guessing the direction would invent single-exit areas. **Publishing `ROTATION`
+  on that layer would fix this, and it is the single most useful thing the City
+  could do for this page.**
 - **Buildings are drawn at a uniform height** because the City's footprint layer
   carries none. Terrain is exaggerated 1.5x so slope reads.
 - **Only the street layer has a harvest script.** The other layers in

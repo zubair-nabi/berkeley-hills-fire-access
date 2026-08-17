@@ -42,7 +42,7 @@ def segments():
 
 @pytest.fixture(scope="module")
 def areas():
-    berk, _segs, _all = deadends.run(deadends.SNAP_M, quiet=True)
+    berk, _segs, _all, _info = deadends.run(deadends.SNAP_M, quiet=True)
     return berk
 
 
@@ -158,7 +158,7 @@ def test_count_is_stable_across_snap_tolerance():
     """
     counts = {}
     for tol in (1.0, 2.0, 3.0, 4.0, 6.0, 8.0):
-        berk, _s, _a = deadends.run(tol, quiet=True)
+        berk, _s, _a, _i = deadends.run(tol, quiet=True)
         counts[tol] = len(berk)
 
     lo, hi = min(counts.values()), max(counts.values())
@@ -262,3 +262,49 @@ def test_panoramic_and_the_hill_courts_match_kld():
     for street in ("PANORAMIC WAY", "CORONA CT", "EL PORTAL CT", "PARNASSUS CT",
                    "HILL CT", "HIGH CT", "SUMMIT RD", "CAMPUS DR"):
         assert street in agreed, f"{street} is in KLD's list but not in ours"
+
+
+# --- traffic barriers --------------------------------------------------------
+
+def test_traffic_circles_are_not_treated_as_closures():
+    """The layer holds 147 records: 87 diverters and 60 traffic circles. A
+    roundabout calms traffic, it does not stop you driving through, and counting
+    the circles would sever 60 junctions that are wide open."""
+    import json as _json
+    import pathlib as _pathlib
+    bars = _json.loads((_pathlib.Path(deadends.HERE) / "barriers.json").read_text())
+    assert len(bars) == 87, f"expected 87 diverters, got {len(bars)}"
+    assert all("circle" not in (b.get("cat") or "").lower() for b in bars)
+
+
+def test_only_mid_block_closures_are_cut():
+    """48 of the 55 full diverters sit at junctions, where a diagonal barrier
+    partitions the legs into two pairs and this data cannot say which pair.
+    ROTATION is empty on all 87 records. Cutting on a guess would invent
+    single-exit areas, so those are recorded and drawn but never modelled."""
+    _b, _s, _a, info = deadends.run(deadends.SNAP_M, quiet=True)
+    assert info["cut"] == 7, f"expected 7 mid-block cuts, got {info['cut']}"
+    assert info["unmodelled"] == 48, (
+        f"expected 48 junction diverters left unmodelled, got {info['unmodelled']}")
+
+
+def test_barriers_add_a_real_area_and_remove_none():
+    """The acceptance test for the whole barrier idea, in both directions.
+
+    Agreement with the City's consultants must go UP, and no area may appear that
+    they do not list. Both rising would mean we had over-severed, which is the
+    error this project exists to avoid. In practice the mid-block cuts recover
+    exactly one neighbourhood, Laurel St, and lose nothing.
+    """
+    import compare_kld
+    before, _s, _a, _i = deadends.run(deadends.SNAP_M, quiet=True, barriers=False)
+    after, _s2, _a2, _i2 = deadends.run(deadends.SNAP_M, quiet=True, barriers=True)
+    nb = {compare_kld.norm(n) for a in before for n in a["names"] if n}
+    na = {compare_kld.norm(n) for a in after for n in a["names"] if n}
+    kld = set(compare_kld.kld_entries())
+
+    assert not (nb - na), f"barriers removed areas: {sorted(nb - na)}"
+    gained = na - nb
+    assert gained, "barriers changed nothing at all"
+    assert gained <= kld, (
+        f"barriers invented areas the City's study does not list: {sorted(gained - kld)}")
