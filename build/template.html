@@ -231,7 +231,7 @@ anywhere in the city.</p>
 <div class="warn-strip">This is not an evacuation plan and it will never tell you that you are safe.
   In an emergency follow the Fire Department, not this page.</div>
 
-<div id="out"></div>
+<div id="out" role="status" aria-live="polite"></div>
 
 <div id="after" hidden>
   <h3>What you can do about it</h3>
@@ -593,10 +593,24 @@ function render(feat){
   setHash(addr);
   wireResultButtons(addr);}
 
+/* On a phone the lookup box fills the screen, so the answer renders below the
+   fold and tapping "Show me" looks like it did nothing. Bring the result into
+   view, but only when it is actually off screen: on a desktop where the card is
+   already visible, yanking the page would be worse than doing nothing. */
+function revealOut(){
+  const el=$("#out");
+  if(!el) return;
+  const r=el.getBoundingClientRect();
+  const visible = r.top >= 0 && r.top < window.innerHeight*0.6;
+  if(visible) return;
+  const reduce=window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView({behavior: reduce ? "auto" : "smooth", block:"start"});}
+
 async function run(){
   const q=$("#addr").value.trim();
   if(q.length<3){$("#out").innerHTML=`<div class="err">Type at least three characters.</div>`;return;}
   $("#out").innerHTML=`<div class="card"><div class="sub">Looking up…</div></div>`;
+  revealOut();
   try{
     const hits=await geocode(q);
     if(!hits.length){$("#out").innerHTML=`<div class="err">No City address point matched “${esc(q)}”. Try just the street name.</div>`;return;}

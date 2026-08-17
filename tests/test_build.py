@@ -368,3 +368,22 @@ def test_page_has_an_inline_favicon(built):
     assert svg.startswith("<svg") and svg.rstrip().endswith("</svg>")
     assert "#FFCC00" in svg, "the favicon is not the MUTCD yellow used on the map"
     assert len(m.group(1)) < 4000, "favicon data URI is unreasonably large"
+
+
+def test_result_is_brought_into_view_on_small_screens(built):
+    """On a phone the lookup box fills the screen, so the answer rendered below
+    the fold and tapping "Show me" looked like it had done nothing."""
+    assert "function revealOut" in built
+    assert "revealOut();" in built, "revealOut is defined but never called"
+    # Only when the result is actually off screen. Yanking a desktop page where
+    # the card is already visible would be worse than doing nothing.
+    assert "window.innerHeight*0.6" in built
+    assert "if(visible) return;" in built
+    assert "prefers-reduced-motion: reduce" in built, (
+        "smooth scrolling must yield to prefers-reduced-motion")
+
+
+def test_result_region_is_announced(built):
+    """A sighted user sees the card appear. Someone using a screen reader gets
+    nothing unless the region announces itself."""
+    assert 'id="out" role="status" aria-live="polite"' in built
