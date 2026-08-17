@@ -62,12 +62,13 @@ Everything comes from layers the City of Berkeley publishes openly, via
 | --- | --- | --- |
 | Street network | `Planning/Accela/3` | 6,971 segments, regional |
 | Single-exit areas | derived, see below | 138 |
-| Narrow streets | City's published narrow-streets list | 882 segments |
-| Hill Fire Zones 2 and 3 | `Planning` | 3 polygons |
-| CalFire severity zones | State FRAP, via the City | |
-| Landslide and Alquist-Priolo fault zones | State, via the City | |
-| Chipper areas | Fire Department | 8 areas |
-| Fire stations | Fire Department | 7 |
+| Narrow streets | `Planning/Land_Use_Planning/55` | 825 segments in Berkeley |
+| Hill Fire Zones 1, 2 and 3 | `Planning/Land_Use_Planning/6` | 3 polygons |
+| CalFire severity zones | `Planning/Accela/32`, very high only | 1 |
+| Landslide zones | `Planning/Land_Use_Planning/11` | 79 |
+| Alquist-Priolo fault zones | `Planning/Land_Use_Planning/13` | 3 |
+| Chipper areas | `Parks/FireFuel_Chipper_Areas/0` | 8 |
+| Fire stations | `Public/Portal_CommSvcs/2` | 7 |
 | Building footprints | fetched per neighbourhood on search | |
 | Address points | 62,090 published points | |
 
@@ -76,7 +77,29 @@ per segment (`MUNILEFT`/`MUNIRIGHT`), grade separation (`F_ZLEV`/`T_ZLEV`), road
 class, one-way direction and pavement width. The derivation uses all of those
 instead of guessing at them geometrically.
 
-Snapshot in `build/streets_raw.json.gz`, harvested 2026-08-16.
+Both snapshots are reproducible from source:
+
+```
+python3 build/harvest_streets.py   # the regional network -> streets_raw.json
+python3 build/harvest_layers.py    # everything else      -> data.json
+```
+
+`build/data.json` had no harvest script until now and could not be refreshed or
+checked. Writing one immediately surfaced four faults in the layer choices it had
+been carrying, all of which built and rendered without complaint:
+
+- **`Police/PublicSafety/0` is called "Fire Stations" and holds one record**, an
+  administrative office on McKinley Ave. The seven real stations are in
+  `Public/Portal_CommSvcs/2`.
+- **Every layer caps a response at 1000 or 2000 rows and says nothing when it
+  truncates.** The narrow-streets list came back as exactly 1000. The harvester
+  now pages and warns if the total does not match.
+- **The narrow-streets layer is regional**, so it needs the same jurisdiction
+  filter as the street network. Unfiltered it brings in Caldecott Ln and 54th St.
+- **The landslide and fault layers are regional too**, returning 953 East Bay
+  polygons. They are clipped to a Berkeley envelope server-side.
+
+Each is now a test in `tests/test_build.py`.
 
 ## How the derivation works, and what went wrong three times
 

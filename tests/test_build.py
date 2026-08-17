@@ -86,3 +86,63 @@ def test_readme_quotes_the_current_count():
         f"README does not state the current count of {n} single-exit areas")
     assert str(n) in readme, (
         f"README does not mention the current count of {n} single-exit areas")
+
+
+# --- the layer snapshot ------------------------------------------------------
+#
+# Every assertion here is a bug harvest_layers.py shipped on its first run, and
+# every one was silent: the page still built, still rendered, still answered.
+# It just answered wrong.
+
+@pytest.fixture(scope="module")
+def data():
+    return json.loads((BUILD / "data.json").read_text())
+
+
+def test_all_three_fire_zones_present(data):
+    """Zone 1 matters. Without it the page cannot distinguish "you are in zone 1,
+    outside the hill inspection zones" from "you are in no mapped zone", which
+    are different statements. A filter to zones 2 and 3 dropped it."""
+    zones = sorted(z["a"]["PLN_HILL_ZONE"] for z in data["fireZones"])
+    assert zones == [1, 2, 3], f"expected hill zones 1, 2 and 3, got {zones}"
+
+
+def test_seven_fire_stations(data):
+    """Police/PublicSafety/0 is called "Fire Stations" and holds one record, an
+    administrative office. Harvesting it cut the page from seven stations to one
+    and nothing complained."""
+    assert len(data["stations"]) == 7, f"expected 7 stations, got {len(data['stations'])}"
+    for s in data["stations"]:
+        assert s["name"] and s["addr"], f"station missing name or address: {s}"
+        assert -122.35 < s["x"] < -122.20 and 37.83 < s["y"] < 37.92
+
+
+def test_layers_are_berkeley_only(data):
+    """The narrow-streets layer is regional. Unfiltered it brings in Caldecott
+    Ln, 54th St and the Emeryville waterfront."""
+    names = {s["s"] for s in data["narrow"]}
+    for foreign in ("CALDECOTT LN", "54TH ST", "59TH ST"):
+        assert foreign not in names, f"{foreign} is not in Berkeley"
+
+
+def test_no_layer_hit_a_page_limit(data):
+    """ArcGIS caps a response at 1000 or 2000 rows and says nothing when it
+    truncates. The narrow-streets list came back as exactly 1000 before the
+    harvester paged."""
+    for key, n in (("narrow", len(data["narrow"])), ("streets", len(data["streets"]))):
+        assert n not in (1000, 2000), (
+            f"{key} has exactly {n} rows, which is an ArcGIS page limit, "
+            f"so the harvest was probably truncated")
+
+
+def test_hazard_layers_are_populated(data):
+    h = data["hazards"]
+    assert len(h["landslide"]) > 20, "landslide zones look empty"
+    assert len(h["fault"]) >= 1, "Alquist-Priolo zones look empty"
+    assert len(h["calfireVHFHSZ"]) >= 1, "CalFire very high severity zone missing"
+
+
+def test_distances_read_as_metres_below_a_kilometre(built):
+    """49 m rendered as "0.05 km" because the formatter always divided by 1000."""
+    assert "function km(m)" in built
+    assert 'm>=1000 ? (m/1000).toFixed(1)+" km" : m+" m"' in built

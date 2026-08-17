@@ -296,6 +296,10 @@ const INSIDE_M=45;
 /* Distance from a point to the nearest point of any segment in an area, measured
    against the segments rather than their endpoints. A long block would otherwise
    read as far away from its own middle. */
+/* 49 m read as "0.05 km" because the formatter always divided by 1000. Metres
+   below a kilometre, kilometres above it. */
+function km(m){ return m>=1000 ? (m/1000).toFixed(1)+" km" : m+" m"; }
+
 function areaDist(x,y,a){
   const p=Math.PI/180, MX=111320*Math.cos(y*p), MY=110574;
   const px=x*MX, py=y*MY;
@@ -433,13 +437,13 @@ function render(feat){
          <ul class="de">${inside.slice(0,2).map(o=>
            `<li><b>${esc(o.a.names.slice(0,3).join(", "))}</b>${
              o.a.names.length>3?` and ${o.a.names.length-3} more`:""}
-            · ${(o.a.metres/1000).toFixed(o.a.metres>=1000?1:2)} km of street behind that one junction</li>`).join("")}</ul>`
+            · ${km(o.a.metres)} of street behind that one junction</li>`).join("")}</ul>`
       : `<span class="tag ok">More than one</span> your street reaches the rest of
          Berkeley by more than one route.`}</span></div>
     <div class="fact"><span class="k">Single-exit areas within 400m</span><span class="v">${
       near.length ? `<b>${near.length}</b><ul class="de">${near.map(o=>
-        `<li>${esc(o.a.names.slice(0,2).join(", "))} · ${o.m} m · ${
-          o.a.metres} m of street behind one junction</li>`).join("")}</ul>`
+        `<li>${esc(o.a.names.slice(0,2).join(", "))} · ${o.m} m away · ${
+          km(o.a.metres)} of street behind one junction</li>`).join("")}</ul>`
       : "none within 400 m"}</span></div>
     <div class="fact"><span class="k">Nearest fire station</span><span class="v">${
       esc(st.s.name)}, ${esc(st.s.addr)} · <b>${st.m} m</b> in a straight line</span></div>
@@ -867,7 +871,7 @@ function initMap(x,y,st,apn){
       const f=e.features[0], c=f.geometry.coordinates.slice(), p=f.properties;
       pop.setLngLat(c).setHTML(
         `<div class="pt">${esc(p.n||p.s||"Unnamed road")}</div>
-         <div class="pa">${p.m>=1000?(p.m/1000).toFixed(1)+" km":p.m+" m"} of street
+         <div class="pa">${km(p.m)} of street
            across ${p.seg} segment${p.seg==1?"":"s"} leaves through this junction</div>
          <div class="pd">${dist(c[0],c[1])} from your address, straight line</div>
          <div class="pn">Derived from street centrelines and not checked on the ground. A gate or bollard
