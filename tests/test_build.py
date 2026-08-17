@@ -351,3 +351,20 @@ def test_refresh_workflow_opens_a_pull_request_and_does_not_push():
     # The independent yardstick must not be moved to keep a number green.
     assert "osm_roads" not in text.split("# The OpenStreetMap")[-1].split("on:")[0] or True
     assert "harvest_streets.py" in text and "harvest_layers.py" in text
+
+
+def test_page_has_an_inline_favicon(built):
+    """The page shipped with no favicon at all and /favicon.ico returned 404.
+
+    It is a data URI rather than a file so the page keeps its one promise: open
+    index.html from anywhere, including a USB stick, and it is complete. A
+    favicon.ico would have been the only asset it needed.
+    """
+    import urllib.parse
+    m = re.search(r'<link rel="icon" type="image/svg\+xml" href="(data:image/svg\+xml,[^"]+)"',
+                  built)
+    assert m, "no inline favicon in the page"
+    svg = urllib.parse.unquote(m.group(1).split(",", 1)[1])
+    assert svg.startswith("<svg") and svg.rstrip().endswith("</svg>")
+    assert "#FFCC00" in svg, "the favicon is not the MUTCD yellow used on the map"
+    assert len(m.group(1)) < 4000, "favicon data URI is unreasonably large"
