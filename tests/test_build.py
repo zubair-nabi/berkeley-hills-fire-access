@@ -146,3 +146,40 @@ def test_distances_read_as_metres_below_a_kilometre(built):
     """49 m rendered as "0.05 km" because the formatter always divided by 1000."""
     assert "function km(m)" in built
     assert 'm>=1000 ? (m/1000).toFixed(1)+" km" : m+" m"' in built
+
+
+# --- disagreements reach the reader -----------------------------------------
+
+def test_every_area_carries_an_osm_verdict(built):
+    """Publishing the confirmations while leaving the disagreements in a README
+    would be shipping the convenient half of the result."""
+    m = re.search(r"const DATA\s*=\s*(\{.*?\});", built, re.S)
+    areas = json.loads(m.group(1))["areas"]
+    assert areas, "no areas in the built page"
+    for a in areas:
+        assert a.get("v") in ("ok", "disputed", "none"), f"no verdict on {a['names'][:1]}"
+
+
+def test_disputed_areas_are_marked_in_the_page(built):
+    m = re.search(r"const DATA\s*=\s*(\{.*?\});", built, re.S)
+    data = json.loads(m.group(1))
+    disputed = [a for a in data["areas"] if a["v"] == "disputed"]
+    assert len(disputed) == data["meta"]["osmDisputed"] == 8, (
+        f"expected 8 disputed areas, page has {len(disputed)}")
+    for a in disputed:
+        assert a.get("vn", 0) > 1, f"{a['names'][:1]} disputed but records no exit count"
+
+
+def test_the_page_shows_the_disagreement(built):
+    """A reader on a disputed street must be told, on the page, not in a repo."""
+    assert "OpenStreetMap disagrees" in built, "no caveat text in the page"
+    assert 'id:"dedisp"' in built, "no separate map layer for disputed areas"
+    assert '"line-dasharray"' in built, "disputed areas are not drawn as broken lines"
+    assert "class=\"caveat\"" in built or "caveat" in built
+
+
+def test_disputed_areas_are_not_drawn_as_solid(built):
+    """The solid line layer must exclude them; a solid line for a contested
+    finding claims more than the data supports."""
+    assert '["!=",["get","v"],"disputed"]' in built
+    assert '["==",["get","v"],"disputed"]' in built

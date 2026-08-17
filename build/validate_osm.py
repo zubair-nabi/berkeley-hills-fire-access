@@ -158,21 +158,28 @@ def run(verbose=False):
 
     tally = collections.Counter()
     disputed = []
+    marks = {}
     for a in areas:
+        key = f"{a['exit'][0]:.5f},{a['exit'][1]:.5f}"
         clusters = exits_for(a, adj, pos, street, lookup)
         if clusters is None:
             tally["uncheckable"] += 1
+            marks[key] = {"v": "none"}
             continue
         k = len(clusters)
         if k == 1:
             tally["confirmed"] += 1
+            marks[key] = {"v": "ok"}
         elif k == 0:
             tally["isolated"] += 1
+            marks[key] = {"v": "none"}
         else:
             tally["disputed"] += 1
-            disputed.append((a["metres"], ", ".join(a["names"][:2]),
-                             [sorted(c[1])[:2] for c in clusters]))
+            outs = [sorted(c[1])[:2] for c in clusters]
+            marks[key] = {"v": "disputed", "n": k}
+            disputed.append((a["metres"], ", ".join(a["names"][:2]), outs))
 
+    (HERE / "verdicts.json").write_text(json.dumps(marks, separators=(",", ":")))
     checkable = tally["confirmed"] + tally["disputed"]
     rate = tally["confirmed"] / checkable if checkable else 0.0
     print(f"{len(areas)} areas checked against OpenStreetMap public roads")

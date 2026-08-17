@@ -48,8 +48,27 @@ def main() -> int:
         return 1
     areas = json.loads(deadends_path.read_text())
 
+    # Stamp each area with what the independent OSM check made of it. Shipping
+    # the confirmations while leaving the disagreements in a README would be
+    # publishing the convenient half of the result: a resident on Middlefield Rd
+    # would be told they have one way out with no hint another survey disagrees.
+    verdicts_path = HERE / "verdicts.json"
+    if not verdicts_path.exists():
+        print("error: build/verdicts.json missing, run build/validate_osm.py first",
+              file=sys.stderr)
+        return 1
+    verdicts = json.loads(verdicts_path.read_text())
+    for a in areas:
+        v = verdicts.get(f"{a['exit'][0]:.5f},{a['exit'][1]:.5f}", {"v": "none"})
+        a["v"] = v["v"]
+        if v["v"] == "disputed":
+            a["vn"] = v["n"]
+    counts = {k: sum(1 for a in areas if a["v"] == k) for k in ("ok", "disputed", "none")}
+
     data.pop("deadEnds", None)
     data["areas"] = areas
+    data["meta"]["osmConfirmed"] = counts["ok"]
+    data["meta"]["osmDisputed"] = counts["disputed"]
     data["meta"]["singleExitAreas"] = len(areas)
     data["meta"]["metresBehindSingleExit"] = sum(a["metres"] for a in areas)
     data["meta"].pop("berkeleyNamedRoadDeadEnds", None)
@@ -61,6 +80,8 @@ def main() -> int:
 
     print(f"single-exit areas {len(areas)}, "
           f"{data['meta']['metresBehindSingleExit'] / 1000:.1f} km behind them")
+    print(f"  OSM verdicts: {counts['ok']} confirmed, {counts['disputed']} disputed, "
+          f"{counts['none']} not checkable")
     print(f"wrote index.html  {len(out):,} bytes")
     for k, v in sorted((k, len(v)) for k, v in data.items() if isinstance(v, list)):
         print(f"  {k:<12} {v:>6,}")

@@ -188,6 +188,14 @@ short streets where OSM records a connection the City's centreline does not:
 Middlefield Rd, Woodhaven St, Folger Ave, Sixth St, Olympus Ave, Overlook Rd, Bay
 Tree Ln, Hopkins St. Run `python3 build/validate_osm.py -v` to see them.
 
+**These are marked on the page, not just recorded here.** The verdicts are written
+to `build/verdicts.json` and stamped onto each area at build time. Disputed areas
+are drawn as a broken line rather than a solid one, tagged `disputed` in the nearby
+list, and anyone whose own address falls inside one is told plainly that two surveys
+give two answers and this page cannot say which is right. Publishing the 104
+confirmations while keeping the 8 disagreements in a repository file would be
+shipping the convenient half of the result.
+
 ### By council district
 
 | District | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
@@ -225,10 +233,10 @@ where an arbitrary choice would flip the count. The Redistricting layer's
 python3 build/harvest_streets.py   # only to refresh from the City, writes streets_raw.json
 python3 build/deadends.py          # derive single-exit areas -> deadends.json
 python3 build/deadends.py --sweep  # the stability check, by hand
-python3 build/build.py             # assemble index.html
+python3 build/validate_osm.py      # cross-check, writes verdicts.json
+python3 build/build.py             # assemble index.html (needs verdicts.json)
 python3 build/districts.py         # regenerate the council district table
-python3 build/validate_osm.py -v   # cross-check against OpenStreetMap
-python3 -m pytest tests/           # 26 tests
+python3 -m pytest tests/           # 36 tests
 ```
 
 CI runs the tests on every push and fails if `deadends.json` or `index.html` are

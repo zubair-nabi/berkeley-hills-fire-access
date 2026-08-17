@@ -31,6 +31,7 @@ jobs:
       - name: derivation is reproducible
         run: |
           python build/deadends.py
+          python build/validate_osm.py
           git diff --exit-code --stat build/deadends.json \
             || (echo "::error::deadends.json is stale, run build/deadends.py and commit"; exit 1)
 
