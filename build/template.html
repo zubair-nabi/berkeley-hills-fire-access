@@ -1,0 +1,889 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>One Way Out · Berkeley evacuation access</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Azeret+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+*{box-sizing:border-box}
+:root{--paper:#EEECE2;--card:#fff;--ink:#0E0E0C;--ink2:#45443C;--muted:#6B695E;
+  --acid:#D6FF2E;--hot:#EE3F12;--ok:#00875A;--blue:#3B6FA8;--grid:#D9D6CA}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Bricolage Grotesque",system-ui,sans-serif;font-optical-sizing:auto;
+  font-size:16px;line-height:1.55}
+.wrap{max-width:860px;margin:0 auto;padding:44px 24px 90px}
+.kick{font-family:"Azeret Mono",monospace;font-size:10px;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+h1{font-size:clamp(2.2rem,6vw,3.4rem);font-weight:800;letter-spacing:-.045em;line-height:.98;margin:0 0 16px}
+h1 mark{background:var(--acid);padding:0 .08em}
+.lede{font-size:17px;color:var(--ink2);max-width:64ch;margin:0 0 8px}
+
+.seam{border:2.5px solid var(--ink);border-left-width:10px;background:var(--card);
+  padding:18px 20px;margin:24px 0 32px;box-shadow:4px 4px 0 var(--ink)}
+.seam b{display:block;font-size:15px;margin-bottom:6px}
+.seam p{margin:0 0 9px;font-size:14.5px;line-height:1.6;color:var(--ink2)}
+.seam p:last-child{margin:0}
+
+.lookup{background:var(--ink);padding:22px;margin:0 0 26px}
+.lookup label{display:block;font-family:"Azeret Mono",monospace;font-size:10px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--acid);margin-bottom:9px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+#addr{flex:1 1 320px;font-family:"Azeret Mono",monospace;font-size:15px;padding:12px 14px;
+  border:2px solid var(--acid);background:#1A1A16;color:#fff}
+#addr::placeholder{color:#6B695E}
+button{font-family:"Azeret Mono",monospace;font-size:12px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;background:var(--acid);color:var(--ink);border:2px solid var(--acid);
+  padding:12px 20px;cursor:pointer}
+button:hover{background:#fff;border-color:#fff}
+.hint{font-family:"Azeret Mono",monospace;font-size:11px;color:#8B8A7E;margin-top:10px}
+
+#out{margin:0 0 30px}
+.card{background:var(--card);border:2.5px solid var(--ink);box-shadow:5px 5px 0 var(--ink);
+  padding:22px 24px;margin:0 0 18px}
+.card h2{font-size:20px;font-weight:800;letter-spacing:-.02em;margin:0 0 4px}
+.card .sub{font-family:"Azeret Mono",monospace;font-size:11px;color:var(--muted);margin-bottom:16px}
+.fact{display:grid;grid-template-columns:190px 1fr;gap:10px 16px;padding:11px 0;
+  border-top:1px dotted var(--grid);align-items:baseline}
+.fact:first-of-type{border-top:0}
+.fact .k{font-family:"Azeret Mono",monospace;font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted)}
+.fact .v{font-size:15.5px}
+.fact .v b{font-weight:800}
+.tag{display:inline-block;font-family:"Azeret Mono",monospace;font-size:10px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border:2px solid var(--ink)}
+.tag.hot{background:var(--hot);color:#fff;border-color:var(--hot)}
+.tag.warn{background:var(--acid)}
+.tag.ok{background:var(--ok);color:#fff;border-color:var(--ok)}
+.tag.none{color:var(--muted);border-color:var(--grid)}
+ul.de{margin:6px 0 0;padding-left:18px}
+ul.de li{font-size:14px;color:var(--ink2);margin:0 0 5px}
+.err{background:var(--hot);color:#fff;padding:14px 18px;font-size:15px}
+/* A street-network diagram, deliberately not a map. No basemap, no labels beyond
+   street names, and never a route. It shows the topology being analysed so the
+   page cannot be mistaken for something to evacuate by. */
+.diagram{border:2px solid var(--ink);background:#F6F5EE;margin:16px 0 4px}
+.diagram svg{display:block;width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;margin:10px 0 0;
+  font-family:"Azeret Mono",monospace;font-size:10px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px}
+#map{height:520px;border:2px solid var(--ink);margin:16px 0 0;background:#EDE7DA}
+.maplibregl-ctrl-attrib,.maplibregl-ctrl-logo{display:none!important}
+.maplibregl-popup-content{background:var(--ink)!important;color:var(--paper)!important;
+  border-radius:0!important;padding:0!important;overflow:hidden;min-width:240px}
+.maplibregl-popup-content .pt{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+  font-size:15.5px;letter-spacing:-.015em;padding:13px 14px 2px}
+.maplibregl-popup-content .pa{font-family:"Azeret Mono",monospace;font-size:11px;
+  color:#C9C3B2;padding:0 14px 2px}
+.maplibregl-popup-content .pd{font-family:"Azeret Mono",monospace;font-size:10.5px;
+  color:#8B8A7E;padding:0 14px 12px}
+.maplibregl-popup-content .p911{background:var(--hot);color:#fff;padding:9px 14px;
+  font-size:13.5px;font-weight:600}
+.maplibregl-popup-content .p911 b{font-size:16px}
+.maplibregl-popup-content .pl{display:flex;justify-content:space-between;gap:10px;
+  align-items:baseline;padding:9px 14px;border-top:1px solid #2A2822}
+.maplibregl-popup-content .pl span{font-family:"Azeret Mono",monospace;font-size:10px;
+  letter-spacing:.06em;text-transform:uppercase;color:#8B8A7E}
+.maplibregl-popup-content .pl a{font-family:"Azeret Mono",monospace;font-size:12.5px;
+  color:var(--acid);text-decoration:none;white-space:nowrap;font-weight:700}
+.maplibregl-popup-content .pn{font-size:11px;line-height:1.5;color:#8B8A7E;
+  padding:10px 14px 12px;border-top:1px solid #2A2822}
+.maplibregl-popup-close-button{color:var(--paper)!important;font-size:20px!important;
+  padding:2px 8px!important}
+.maplibregl-popup-tip{border-top-color:var(--ink)!important}
+.mapnote{font-family:"Azeret Mono",monospace;font-size:10px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);margin-top:9px}
+.note{font-size:13.5px;color:var(--muted);line-height:1.6;border-top:2px solid var(--ink);
+  padding-top:12px;margin-top:18px}
+
+.warn-strip{background:var(--hot);color:#fff;padding:12px 18px;margin:0 0 26px;
+  font-size:14px;line-height:1.5;font-weight:600}
+.acts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:14px 0 0}
+.act{display:block;background:var(--card);border:2.5px solid var(--ink);box-shadow:4px 4px 0 var(--ink);
+  padding:16px 18px;text-decoration:none;color:var(--ink);transition:transform .12s,box-shadow .12s}
+.act:hover{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--ink)}
+.act b{display:block;font-size:15.5px;letter-spacing:-.015em;margin-bottom:5px}
+.act span{display:block;font-size:13.5px;color:var(--ink2);line-height:1.5}
+button.ghost{background:transparent;color:var(--acid);border:2px solid var(--acid)}
+button.ghost:hover{background:var(--acid);color:var(--ink)}
+.tg i{display:inline-block;width:11px;height:11px;margin-right:7px;vertical-align:-1px;
+  border:1.5px solid rgba(0,0,0,.35)}
+.tg.act2 i{display:none}
+.legend2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:0;
+  border:2px solid var(--ink);border-top:0;margin:12px 0 0;background:var(--card)}
+.legend2 > div{padding:12px 14px;border-bottom:1px dotted var(--grid);border-right:1px dotted var(--grid)}
+.legend2 i.sw{display:inline-block;width:14px;height:14px;border:2px solid var(--ink);
+  vertical-align:-2px;margin-right:8px}
+.legend2 b{font-size:14px;letter-spacing:-.01em}
+.legend2 span{display:block;font-size:12.5px;color:var(--ink2);line-height:1.5;margin-top:5px}
+.toggles{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}
+.tg{font-family:"Azeret Mono",monospace;font-size:10.5px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;background:var(--card);color:var(--muted);border:2px solid var(--grid);
+  padding:7px 11px;cursor:pointer;box-shadow:none}
+.tg:hover{border-color:var(--ink);color:var(--ink);background:var(--card)}
+.tg.on{background:var(--ink);color:var(--acid);border-color:var(--ink)}
+.tg.act2{margin-left:auto;background:var(--acid);color:var(--ink);border-color:var(--ink)}
+.tg.act2:hover{background:#fff}
+.sharebar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:16px 0 0;
+  border-top:2px solid var(--ink);padding-top:14px}
+.sharebar b{font-family:"Azeret Mono",monospace;font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted)}
+.sharebar button{background:var(--card);color:var(--ink);border:2.5px solid var(--ink);
+  box-shadow:3px 3px 0 var(--ink);font-size:11px;padding:9px 14px}
+.sharebar button:hover{background:var(--acid);border-color:var(--ink);
+  transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--ink)}
+@media print{
+  .lookup,.toggles,.sharebar,.warn-strip,#after,.maplibregl-ctrl,.act{display:none!important}
+  body{background:#fff}.card{box-shadow:none;break-inside:avoid}
+  #map{height:340px}.wrap{padding:0}
+  .srclist{display:block}
+}
+.srclist{list-style:none;padding:0;margin:18px 0 0;max-width:72ch}
+.srclist li{font-size:13.5px;color:var(--ink2);line-height:1.6;padding:9px 0;
+  border-top:1px dotted var(--grid)}
+.srclist li b{color:var(--ink);display:block;font-size:12px;font-family:"Azeret Mono",monospace;
+  letter-spacing:.09em;text-transform:uppercase;margin-bottom:3px}
+.stats{display:flex;flex-wrap:wrap;gap:0;border:2.5px solid var(--ink);margin:30px 0;background:var(--card)}
+.stats div{flex:1 1 150px;padding:16px 18px;border-right:2px solid var(--ink)}
+.stats div:last-child{border-right:0}
+.stats b{display:block;font-size:30px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.stats span{display:block;font-family:"Azeret Mono",monospace;font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);margin-top:7px;line-height:1.5}
+h3{font-size:19px;font-weight:800;letter-spacing:-.02em;margin:34px 0 10px}
+p.body{font-size:15px;line-height:1.62;color:var(--ink2);max-width:68ch;margin:0 0 12px}
+p.body b{color:var(--ink)}
+a{color:var(--hot)}
+.disclaimer{border:2.5px solid var(--ink);background:var(--card);margin:40px 0 0;
+  box-shadow:6px 6px 0 var(--ink)}
+.disclaimer h3{margin:0;padding:16px 20px;border-bottom:2.5px solid var(--ink);
+  background:var(--ink);color:var(--acid);font-size:17px}
+.disclaimer .drow{padding:14px 20px;border-bottom:1px dotted var(--grid);
+  font-size:14px;line-height:1.6;color:var(--ink2);max-width:none}
+.disclaimer .drow:last-child{border-bottom:0}
+.disclaimer .drow b{color:var(--ink)}
+.disclaimer a{color:var(--hot)}
+.foot{margin-top:40px;border-top:2px solid var(--ink);padding-top:16px;
+  font-family:"Azeret Mono",monospace;font-size:10.5px;line-height:1.85;color:var(--muted)}
+@media(max-width:640px){.wrap{padding:26px 15px 60px}.fact{grid-template-columns:1fr;gap:3px}
+  .stats div{border-right:0;border-bottom:2px solid var(--ink);flex:1 1 100%}
+  .stats div:last-child{border-bottom:0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="kick">Berkeley hills</div>
+<h1>How many ways <mark>out</mark>?</h1>
+<p class="lede">Type your address. See the fire zone you are in, the dead-end streets around you,
+and how far the nearest fire station is.</p>
+
+<div class="lookup">
+  <label for="addr">Your Berkeley address</label>
+  <div class="row">
+    <input id="addr" placeholder="e.g. 78 Fairlawn Drive" autocomplete="off">
+    <button id="go">Show me</button>
+    <button id="loc" class="ghost">Use my location</button>
+  </div>
+  <div class="hint">Street name on its own works too.</div>
+</div>
+
+<div class="warn-strip">This is not an evacuation plan and it will never tell you that you are safe.
+  In an emergency follow the Fire Department, not this page.</div>
+
+<div id="out"></div>
+
+<div id="after" hidden>
+  <h3>What you can do about it</h3>
+  <div class="acts">
+    <a class="act" href="https://berkeleyfiresafe.org/inspection" target="_blank" rel="noopener">
+      <b>Book a defensible space inspection</b>
+      <span>The Fire Department inspects hill properties every year, March to November. Free.</span></a>
+    <a class="act" href="https://berkeleyca.gov/safety-health/fire/defensible-space-resident-assistance-program" target="_blank" rel="noopener">
+      <b>Get help clearing vegetation</b>
+      <span>Free City services including green waste removal and chipping.</span></a>
+    <a class="act" href="https://berkeleyca.gov/safety-health/fire/home-hardening-tax-rebate" target="_blank" rel="noopener">
+      <b>Claim the home hardening rebate</b>
+      <span>A tax rebate for ember-resistant work on your house.</span></a>
+    <a class="act" href="https://berkeleyca.gov/safety-health/disaster-preparedness/fire-weather-and-evacuation" target="_blank" rel="noopener">
+      <b>Set up for evacuation</b>
+      <span>Evacuation zones, alerts, and what to do when a warning comes.</span></a>
+  </div>
+  <p class="body" style="margin-top:16px">The single most useful thing on this page is the dead-end count.
+    If the streets around you terminate, everyone leaves the same way you do. Knowing that now is worth
+    more than knowing it during an evacuation.</p>
+</div>
+
+
+<h3>Where this comes from</h3>
+<p class="body">Every number on this page is computed from map layers the City of Berkeley publishes
+  openly. Nothing here is guesswork, and nothing here is official.</p>
+<div class="acts">
+  <a class="act" href="https://berkeleyca.gov/safety-health/fire" target="_blank" rel="noopener">
+    <b>Berkeley Fire Department</b>
+    <span>The official source for everything on this page. If anything here disagrees with them, they
+      are right.</span></a>
+  <a class="act" href="https://berkeleyfiresafe.org" target="_blank" rel="noopener">
+    <b>berkeleyfiresafe.org</b>
+    <span>The City's own address lookup, defensible space rules, and the wildfire resilience
+      dashboard.</span></a>
+</div>
+<ul class="srclist">
+  <li><b>Fire zones and hazards</b> Hill Fire Zones, CalFire Very High Fire Hazard Severity Zone,
+    landslide and Alquist-Priolo fault zones, from the City's ArcGIS server.</li>
+  <li><b>Streets and dead ends</b> City street centrelines. Dead ends are worked out from where a street
+    terminates, then filtered to named roads.</li>
+  <li><b>Buildings</b> The City's building footprint layer, fetched for your neighbourhood when you
+    search. Your own building is matched by parcel number.</li>
+  <li><b>Addresses</b> The City's 62,090 published address points.</li>
+  <li><b>The studies behind it</b> Access Impaired Neighborhood Analysis (SB 99) and Evacuation Route
+    Safety, Capacity, and Viability Analysis (AB 747), both by KLD Engineering for the City of Berkeley,
+    early 2024. Those reports are the real record; this page just makes the same layers searchable.</li>
+</ul>
+
+
+<div class="disclaimer">
+  <h3>Before you rely on any of this</h3>
+  <div class="drow"><b>It is not official.</b> This site is not affiliated with, endorsed by, or connected
+    to the City of Berkeley, the Berkeley Fire Department, or any government agency. It was built by a
+    Berkeley resident using data those agencies publish openly. Where it disagrees with them, they are
+    right and this is wrong.</div>
+  <div class="drow"><b>Never use it in an emergency.</b> Call <b>911</b>. Follow the Fire Department and
+    the County's emergency alerts. Nothing here is an evacuation plan, an evacuation route, or a judgment
+    that anywhere is safe. It is a way to read published maps before anything happens, and that is all.</div>
+  <div class="drow"><b>It is probably wrong in places.</b> Dead ends are worked out from street centrelines
+    and have not been checked on the ground, so some are driveways or service roads, and a street shown as
+    a dead end may have a gate that opens in an emergency. Distances are straight lines, not driving
+    distances. Map layers are a snapshot and the City updates them on its own schedule.</div>
+  <div class="drow"><b>No warranty.</b> Provided as-is, with no guarantee that it is accurate, current, or
+    fit for any purpose. Use it at your own risk. The author accepts no liability for any loss or damage
+    arising from its use, to the extent the law allows.</div>
+  <div class="drow"><b>Open source.</b> The code and the data behind every number are public, so you can
+    check the working or correct it.
+    <a href="https://github.com/zubair-nabi/berkeley-hills-fire-access" id="repo">Source code and data</a>.</div>
+  <div class="drow"><b>Corrections welcome.</b> If something here is wrong, telling the author fixes it for
+    everyone. If something on the City's own maps is wrong, tell the Fire Department, because that fixes
+    the source.</div>
+</div>
+
+<div class="foot" id="foot"></div>
+</div>
+
+<script>
+const DATA = /*__DATA__*/ null;
+const GIS="https://gis.cityofberkeley.info/arcgis/rest/services";
+const ADDR=GIS+"/Public/GISportal/MapServer/0/query";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function pip(x,y,rings){let ins=false;
+  for(const ring of rings){const n=ring.length;let j=n-1;
+    for(let i=0;i<n;i++){const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];
+      if(((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/((yj-yi)||1e-12)+xi)) ins=!ins; j=i;}}
+  return ins;}
+const R=6371000;
+function metres(a,b,c,d){const p=Math.PI/180,dy=(d-b)*p,dx=(c-a)*p*Math.cos((b+d)/2*p);
+  return Math.round(Math.sqrt(dy*dy+dx*dx)*R);}
+
+async function fetchT(url,ms=9000){
+  const r=await fetch(url,{signal:AbortSignal.timeout(ms)});
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  return r.json();}
+
+async function geocode(q){
+  const safe=q.toUpperCase().replace(/'/g,"''");
+  const where=`UPPER(FullAddress) LIKE '%${safe}%'`;
+  const u=`${ADDR}?where=${encodeURIComponent(where)}&outFields=FullAddress,APN&returnGeometry=true&outSR=4326&f=json&resultRecordCount=8`;
+  const d=await fetchT(u);
+  return (d.features||[]).filter(f=>f.geometry);}
+
+function zoneOf(x,y){
+  for(const z of DATA.fireZones){ if(pip(x,y,z.r)) { if(z.a.PLN_HILL_ZONE!==1) return z.a.PLN_HILL_ZONE; } }
+  for(const z of DATA.fireZones){ if(pip(x,y,z.r)) return z.a.PLN_HILL_ZONE; }
+  return null;}
+function inAny(x,y,polys){return (polys||[]).some(p=>pip(x,y,p.r));}
+
+/* Half-width of the view, in metres. 450 puts a few blocks either side, which is
+   the scale at which "how do I get off this street" is a real question. */
+const HALF=450;
+function diagram(cx,cy,st){
+  const W=820,H=560, mPerDegY=110540, mPerDegX=111320*Math.cos(cy*Math.PI/180);
+  const sx=W/(2*HALF), sy=H/(2*HALF*(H/W));
+  const halfY=HALF*(H/W);
+  const X=x=>W/2+(x-cx)*mPerDegX*(W/(2*HALF));
+  const Y=y=>H/2-(y-cy)*mPerDegY*(H/(2*halfY));
+  const inView=(x,y)=>{const px=X(x),py=Y(y);return px>-60&&px<W+60&&py>-60&&py<H+60;};
+  let g="";
+  // hill fire zone, drawn as a soft region so the boundary is visible without dominating
+  for(const z of DATA.fireZones){
+    if(z.a.PLN_HILL_ZONE===1) continue;
+    for(const ring of z.r){
+      if(!ring.some(p=>inView(p[0],p[1]))) continue;
+      g+=`<path d="M${ring.map(p=>X(p[0]).toFixed(1)+","+Y(p[1]).toFixed(1)).join("L")}Z"
+           fill="#EE3F12" fill-opacity=".07" stroke="#EE3F12" stroke-opacity=".45"
+           stroke-width="1.5" stroke-dasharray="6 4"/>`;}}
+  // street centrelines
+  for(const s of DATA.streets){
+    if(!s.p.some(p=>inView(p[0],p[1]))) continue;
+    g+=`<polyline points="${s.p.map(p=>X(p[0]).toFixed(1)+","+Y(p[1]).toFixed(1)).join(" ")}"
+         fill="none" stroke="#0E0E0C" stroke-opacity=".30" stroke-width="1.6"
+         stroke-linecap="round" stroke-linejoin="round"/>`;}
+  // dead-end terminations
+  const near=[];
+  for(const d of DATA.deadEnds){
+    if(!inView(d.x,d.y)) continue;
+    const px=X(d.x),py=Y(d.y); near.push(d);
+    g+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="5.5" fill="#EE3F12"
+         stroke="#0E0E0C" stroke-width="1.6"/>`;
+    if(d.s) g+=`<text x="${(px+9).toFixed(1)}" y="${(py+3.5).toFixed(1)}" font-size="10.5"
+         font-family="Azeret Mono,monospace" fill="#45443C">${esc(d.s)}</text>`;}
+  // fire station, if it happens to be in frame
+  if(inView(st.x,st.y)){
+    g+=`<rect x="${(X(st.x)-6).toFixed(1)}" y="${(Y(st.y)-6).toFixed(1)}" width="12" height="12"
+         fill="#00875A" stroke="#0E0E0C" stroke-width="1.6"/>
+        <text x="${(X(st.x)+11).toFixed(1)}" y="${(Y(st.y)+4).toFixed(1)}" font-size="10.5"
+         font-family="Azeret Mono,monospace" fill="#00875A">${esc(st.name)}</text>`;}
+  // the address itself
+  g+=`<circle cx="${W/2}" cy="${H/2}" r="13" fill="#D6FF2E" stroke="#0E0E0C" stroke-width="2.5"/>
+      <circle cx="${W/2}" cy="${H/2}" r="3.5" fill="#0E0E0C"/>`;
+  // scale bar, 200 m
+  const barPx=200*(W/(2*HALF));
+  g+=`<g transform="translate(24,${H-26})">
+        <line x1="0" y1="0" x2="${barPx.toFixed(1)}" y2="0" stroke="#0E0E0C" stroke-width="2"/>
+        <line x1="0" y1="-5" x2="0" y2="5" stroke="#0E0E0C" stroke-width="2"/>
+        <line x1="${barPx.toFixed(1)}" y1="-5" x2="${barPx.toFixed(1)}" y2="5" stroke="#0E0E0C" stroke-width="2"/>
+        <text x="${(barPx/2).toFixed(1)}" y="-9" font-size="10.5" text-anchor="middle"
+         font-family="Azeret Mono,monospace" fill="#45443C">200 m</text></g>`;
+  return `<div class="diagram"><svg viewBox="0 0 ${W} ${H}" role="img"
+      aria-label="Street network around the address, with dead ends marked."><rect width="${W}" height="${H}" fill="#F6F5EE"/>${g}</svg></div>
+    <div class="legend">
+      <span><i style="background:#D6FF2E;border:2px solid #0E0E0C;border-radius:50%"></i>this address</span>
+      <span><i style="background:#EE3F12;border:2px solid #0E0E0C;border-radius:50%"></i>dead end</span>
+      <span><i style="background:#00875A;border:2px solid #0E0E0C"></i>fire station</span>
+      <span><i style="background:#EE3F12;opacity:.25"></i>hill fire zone 2 or 3</span>
+      <span>${near.length} dead end${near.length===1?"":"s"} in view</span>
+    </div>`;}
+
+function render(feat){
+  const x=feat.geometry.x, y=feat.geometry.y;
+  const addr=feat.attributes.FullAddress;
+  const z=zoneOf(x,y);
+  const vh=inAny(x,y,DATA.hazards.calfireVHFHSZ);
+  const ls=inAny(x,y,DATA.hazards.landslide);
+  const fa=inAny(x,y,DATA.hazards.fault);
+  const near=DATA.deadEnds.map(d=>({d,m:metres(x,y,d.x,d.y)})).filter(o=>o.m<=400)
+              .sort((a,b)=>a.m-b.m).slice(0,6);
+  const st=DATA.stations.map(s=>({s,m:metres(x,y,s.x,s.y)})).sort((a,b)=>a.m-b.m)[0];
+  const tag=(on,onTxt,offTxt,cls)=>on?`<span class="tag ${cls}">${onTxt}</span>`:`<span class="tag none">${offTxt}</span>`;
+
+  $("#out").innerHTML=`<div class="card">
+    <h2>${esc(addr)}</h2>
+    <div class="sub">Matched to a City address point. Everything below is computed from published map layers.</div>
+    <div class="fact"><span class="k">Hill fire zone</span><span class="v">${
+      z===2||z===3 ? `<span class="tag hot">Zone ${z}</span> subject to annual defensible space inspection`
+      : z===1 ? `<span class="tag none">Zone 1</span> outside the hill inspection zones`
+      : `<span class="tag none">not in a mapped hill zone</span>`}</span></div>
+    <div class="fact"><span class="k">CalFire severity zone</span><span class="v">${
+      tag(vh,"Very high","not in the mapped area","hot")}</span></div>
+    <div class="fact"><span class="k">Landslide zone</span><span class="v">${
+      tag(ls,"Within","not within","warn")}</span></div>
+    <div class="fact"><span class="k">Earthquake fault zone</span><span class="v">${
+      tag(fa,"Alquist Priolo","not within","warn")}</span></div>
+    <div class="fact"><span class="k">Dead ends within 400m</span><span class="v">${
+      near.length ? `<b>${near.length}</b>${
+        near.length===6?" or more":""}<ul class="de">${near.map(o=>
+        `<li>${esc(o.d.s)}${o.d.b?`, ${esc(o.d.b)}`:""} · ${o.m} m${o.d.z?` · zone ${o.d.z}`:""}</li>`).join("")}</ul>`
+      : "none found in the street centreline data"}</span></div>
+    <div class="fact"><span class="k">Nearest fire station</span><span class="v">${
+      esc(st.s.name)}, ${esc(st.s.addr)} · <b>${st.m} m</b> in a straight line</span></div>
+    <div id="mapwrap"></div>
+    <div class="sharebar">
+      <b>Share or keep</b>
+      <button id="share">Copy link to this address</button>
+      <button id="print">Print for the fridge</button>
+    </div>
+    <div class="note">The map draws no route and never will. Terrain is exaggerated slightly so slope
+      reads; it is the reason hill roads are narrow and winding, which is what the City's studies are
+      about. Straight-line distance is not drive time, and the SB 99 definition of an access impaired
+      neighbourhood depends on a 5-minute drive-time service area. A dead end shown here has not been
+      verified on the ground and may have a barrier that opens in an emergency. Read the City's studies
+      before drawing any conclusion.</div>
+  </div>`;
+  initMap(x,y,st.s,feat.attributes.APN);
+  $("#after").hidden=false;
+  setHash(addr);
+  wireResultButtons(addr);}
+
+async function run(){
+  const q=$("#addr").value.trim();
+  if(q.length<3){$("#out").innerHTML=`<div class="err">Type at least three characters.</div>`;return;}
+  $("#out").innerHTML=`<div class="card"><div class="sub">Looking up…</div></div>`;
+  try{
+    const hits=await geocode(q);
+    if(!hits.length){$("#out").innerHTML=`<div class="err">No City address point matched “${esc(q)}”. Try just the street name.</div>`;return;}
+    if(hits.length>1 && !/\d/.test(q)){
+      $("#out").innerHTML=`<div class="card"><h2>${hits.length} matches</h2>
+        <div class="sub">Pick one.</div>${hits.map((h,i)=>
+        `<div class="fact"><span class="k">${i+1}</span><span class="v"><a href="#" data-i="${i}">${esc(h.attributes.FullAddress)}</a></span></div>`).join("")}</div>`;
+      window.__hits=hits;
+      document.querySelectorAll('#out a[data-i]').forEach(a=>a.onclick=e=>{
+        e.preventDefault(); render(window.__hits[+a.dataset.i]);});
+      return;}
+    render(hits[0]);
+  }catch(e){
+    $("#out").innerHTML=`<div class="err">Could not reach the City's address service (${esc(e.message)}).
+      Berkeley's GIS server rate limits, so wait a minute and try again.</div>`;}}
+
+/* 3D terrain, on the same keyless stack the housing clock uses: OpenFreeMap vector
+   tiles and an AWS terrarium DEM. Slope is not decoration here. The City's own
+   studies attribute the evacuation problem to steep grades, sharp curves and
+   sub-26-foot pavement widths, none of which is legible on a flat map.
+   If tiles fail, fall back to the inlined SVG so the page still works offline. */
+
+/* Building footprints, fetched live for a small box around the address rather than
+   inlined. The City publishes 36,091 of them citywide, which is far too many to ship,
+   but a few hundred neighbours is one cheap request. PARCELID on the footprint layer
+   matches APN on the address layer exactly, which is what lets the page pick out your
+   own house rather than dropping a pin near it. There is no height field, so every
+   building is drawn at the same height and the caption says so. */
+const BLDG=GIS+"/Planning/Building_Safety/MapServer/7/query";
+async function loadBuildings(x,y,apn){
+  const d=0.0035;
+  const env=encodeURIComponent(JSON.stringify({xmin:x-d,ymin:y-d,xmax:x+d,ymax:y+d,
+    spatialReference:{wkid:4326}}));
+  const u=`${BLDG}?geometry=${env}&geometryType=esriGeometryEnvelope&inSR=4326`
+        +`&spatialRel=esriSpatialRelIntersects&outFields=PARCELID&returnGeometry=true`
+        +`&outSR=4326&f=json&resultRecordCount=2000`;
+  let feats=[];
+  try{ feats=(await fetchT(u,12000)).features||[]; }catch(e){ return; }
+  const norm=s=>String(s||"").replace(/[\s-]/g,"");
+  const target=norm(apn);
+  const mine=[], others=[];
+  for(const f of feats){
+    const g=f.geometry&&f.geometry.rings; if(!g) continue;
+    const feature={type:"Feature",properties:{},geometry:{type:"Polygon",coordinates:g}};
+    (norm(f.attributes.PARCELID)===target && target ? mine : others).push(feature);}
+  if(!MAP||!MAP.getStyle()) return;
+  MAP.addSource("bldg",{type:"geojson",data:fc(others)});
+  MAP.addLayer({id:"bldglayer",type:"fill-extrusion",source:"bldg",
+    paint:{"fill-extrusion-color":"#D8CDB4","fill-extrusion-height":8,
+           "fill-extrusion-opacity":.94,"fill-extrusion-base":0,
+           "fill-extrusion-vertical-gradient":true}},"delayer");
+  if(mine.length){
+    MAP.addSource("mine",{type:"geojson",data:fc(mine)});
+    MAP.addLayer({id:"minelayer",type:"fill-extrusion",source:"mine",
+      paint:{"fill-extrusion-color":"#D6FF2E","fill-extrusion-height":11,
+             "fill-extrusion-opacity":1,"fill-extrusion-base":0,
+             "fill-extrusion-vertical-gradient":true}},"delayer");}
+  /* The pin stays up even when the real footprint is found. An 11-metre acid-green
+     box among six hundred grey ones is not findable at a glance, which was the
+     complaint. The pin floats above the roofline and the beam ties it to the ground. */
+  const n=document.querySelector(".mapnote");
+  if(n) n.textContent=`Drag to rotate, scroll to zoom, click a marker. `
+    +`${feats.length} buildings shown, drawn at a uniform height because the City's `
+    +`footprint layer carries none. Terrain exaggerated 1.5x.`;}
+
+/* Purpose-built icons. A medical cross would read as hospital, so the station is a
+   firefighter's helmet with the raised front shield. The dead end is Vienna Convention
+   sign G13, "a road with only one exit", drawn in its true blue and red rather than
+   recoloured to the site palette: the whole value of a standard safety symbol is that
+   people already know it. The first version used Vienna Convention sign G13, on the
+   argument that it is the international standard. It is, but the United States never
+   ratified that convention: American signs follow the MUTCD, where a dead end is a
+   yellow plate with black text, and a blue European pictogram is something a Berkeley
+   resident has probably never seen. Hence MUTCD yellow and black. Symbol layers also
+   collide-detect, which is what stops the three Arcade Lane terminations stacking. */
+const SHADOW='<filter id="sh" x="-50%" y="-40%" width="200%" height="190%"><feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-opacity=".4"/></filter>';
+
+const SVG_STATION=`<svg xmlns="http://www.w3.org/2000/svg" width="112" height="116" viewBox="0 0 56 58">
+  <defs>${SHADOW}</defs><g filter="url(#sh)">
+  <ellipse cx="28" cy="52" rx="17" ry="4" fill="#0E0E0C" fill-opacity=".25"/>
+  <path d="M6 44 q0-4 6-5 q2-19 16-19 t16 19 q6 1 6 5 z" fill="#00875A" stroke="#0E0E0C" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M28 20 q16 0 16 19 q6 1 6 5 h-22 z" fill="#00603F"/>
+  <path d="M12 39 q2-17 16-17 t16 17 q-16-6-32 0 z" fill="#00A870"/>
+  <path d="M20 30 q8-6 16 0 v10 q-8-5-16 0 z" fill="#EEECE2" stroke="#0E0E0C" stroke-width="2"/>
+  <path d="M28 32 l2.4 4.6 h-4.8 z" fill="#00603F"/></g></svg>`;
+
+const SVG_DEADEND=`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="116" viewBox="0 0 50 58">
+  <defs>${SHADOW}</defs><g filter="url(#sh)">
+  <ellipse cx="25" cy="54" rx="11" ry="3.2" fill="#0E0E0C" fill-opacity=".22"/>
+  <path d="M25 53 V30" stroke="#0E0E0C" stroke-width="3.6"/>
+  <path d="M4 17 v7 L25 34 V27 Z" fill="#C79E00" stroke="#0E0E0C" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M46 17 v7 L25 34 V27 Z" fill="#9C7B00" stroke="#0E0E0C" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M4 17 L25 5 L46 17 L25 29 Z" fill="#FFCC00" stroke="#0E0E0C" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M25 24.6 L12.6 17.4 L25 10.2 L37.4 17.4 Z" fill="none" stroke="#0E0E0C" stroke-width="1.6"/>
+  <rect x="17.4" y="14.2" width="15.2" height="3.2" rx="1" fill="#0E0E0C" transform="rotate(-30 25 15.8)"/>
+  <rect x="23.4" y="13" width="3.2" height="10.6" rx="1" fill="#0E0E0C" transform="rotate(-30 25 18.3)"/>
+  </g></svg>`;
+
+const SVG_HOME=`<svg xmlns="http://www.w3.org/2000/svg" width="132" height="240" viewBox="0 0 66 120">
+  <defs>
+    <linearGradient id="bm" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#D6FF2E" stop-opacity=".95"/>
+      <stop offset=".5" stop-color="#D6FF2E" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#D6FF2E" stop-opacity=".12"/></linearGradient>
+    <linearGradient id="bm2" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <filter id="sh2" x="-60%" y="-30%" width="220%" height="180%">
+      <feDropShadow dx="0" dy="2.5" stdDeviation="2" flood-opacity=".5"/></filter>
+  </defs>
+  <ellipse cx="33" cy="115" rx="17" ry="5" fill="#D6FF2E" fill-opacity=".28"/>
+  <ellipse cx="33" cy="115" rx="9" ry="2.8" fill="#D6FF2E" fill-opacity=".6"/>
+  <path d="M25.5 115 h15 L37 46 h-8 z" fill="url(#bm)"/>
+  <path d="M31 115 h4 L34 50 h-2 z" fill="url(#bm2)"/>
+  <g filter="url(#sh2)">
+    <path d="M33 52 C33 52 15 31 15 20 A18 18 0 1 1 51 20 C51 31 33 52 33 52 Z"
+          fill="#D6FF2E" stroke="#0E0E0C" stroke-width="3.4" stroke-linejoin="round"/>
+    <circle cx="33" cy="20" r="7.2" fill="#0E0E0C"/>
+    <circle cx="33" cy="20" r="2.9" fill="#D6FF2E"/>
+  </g>
+</svg>`;
+
+function addIcon(map,name,svg,w,h){
+  return new Promise(res=>{
+    const img=new Image(w,h);
+    img.onload=()=>{ try{ if(!map.hasImage(name)) map.addImage(name,img,{pixelRatio:2}); }catch(e){} res(); };
+    img.onerror=()=>res();
+    img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);});}
+
+async function loadIcons(map){
+  await Promise.all([
+    addIcon(map,"pin-deadend",SVG_DEADEND,100,116),
+    addIcon(map,"pin-station",SVG_STATION,112,116),
+    /* These must match the svg's own width and height. pin-home was being handed
+       140x148 for a 132x240 drawing, so it rasterised short and landed on the map
+       smaller than the dead end signs it was supposed to stand out from. */
+    addIcon(map,"pin-home",SVG_HOME,132,240)]);}
+
+/* maplibre 4.7.1 does not know symbol-z-elevate. It does not throw on it either: the
+   layer is accepted and then silently dropped, which is how three marker layers went
+   missing with a clean console. The property is gone; this wrapper stays because a
+   dropped layer should never be silent again. */
+function addLayerSafe(map,spec){
+  try{ map.addLayer(spec); return true; }
+  catch(e){
+    try{
+      const c=JSON.parse(JSON.stringify(spec));
+      if(c.layout) delete c.layout["symbol-z-elevate"];
+      map.addLayer(c); return true;
+    }catch(e2){ return false; }}}
+
+let MAP=null;
+const OFM="https://tiles.openfreemap.org";
+function style(){
+  /* The first version washed the whole hillside in flat pink at 13% opacity, which
+     buried every bit of terrain contrast under one colour. The zone boundary is the
+     information; the fill was noise. So the fill is now barely there, the edge does the
+     work, and the hillshade gets to be seen. Warm shadows and cool highlights read as
+     sunlight on a slope rather than grey mud. */
+  return {version:8, glyphs:`${OFM}/fonts/{fontstack}/{range}.pbf`,
+    sources:{
+      omt:{type:"vector",url:`${OFM}/planet`},
+      dem:{type:"raster-dem",tiles:["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+           encoding:"terrarium",tileSize:256,maxzoom:14}},
+    sky:{"sky-color":"#9FC4DE","horizon-color":"#EBDFC6","fog-color":"#E8E0CE",
+         "fog-ground-blend":.28,"horizon-fog-blend":.55,"sky-horizon-blend":.78,
+         "atmosphere-blend":["interpolate",["linear"],["zoom"],0,1,12,.9,16,.4]},
+    light:{anchor:"viewport",color:"#FFF6E2",intensity:.55,position:[1.4,210,32]},
+    layers:[
+      /* Base is pale sage, not sand. Everything outside a mapped landcover polygon
+         falls through to this, and a sand base plus a warm hillshade turned the whole
+         city the colour of a desert. The built-up area gets its own warm fill below,
+         so open hillside and neighbourhood read as two different surfaces. */
+      {id:"bg",type:"background",paint:{"background-color":"#DCE1CB"}},
+      {id:"lu-built",type:"fill",source:"omt","source-layer":"landuse",
+       filter:["in","class","residential","suburb","neighbourhood"],
+       paint:{"fill-color":"#EDE6D3","fill-opacity":.8}},
+      {id:"lc-grass",type:"fill",source:"omt","source-layer":"landcover",
+       filter:["in","class","grass","farmland"],
+       paint:{"fill-color":"#CFDCAF","fill-opacity":.85}},
+      {id:"lc-wood",type:"fill",source:"omt","source-layer":"landcover",
+       filter:["in","class","wood","forest"],
+       paint:{"fill-color":"#A8C08A","fill-opacity":.9}},
+      {id:"lc-scrub",type:"fill",source:"omt","source-layer":"landcover",
+       filter:["==","class","scrub"],
+       paint:{"fill-color":"#C2CE9C","fill-opacity":.8}},
+      {id:"park",type:"fill",source:"omt","source-layer":"park",
+       paint:{"fill-color":"#B6CB93","fill-opacity":.5}},
+      {id:"water",type:"fill",source:"omt","source-layer":"water",
+       paint:{"fill-color":"#8FB6CE"}},
+      {id:"waterline",type:"line",source:"omt","source-layer":"water",
+       paint:{"line-color":"#6E9BB8","line-width":1}},
+      /* Two hillshades stacked: a broad one for form, a tighter one for texture.
+         Warm shadow, cool highlight, which is how sunlit ground actually looks. */
+      {id:"hill-form",type:"hillshade",source:"dem",
+       paint:{"hillshade-exaggeration":.72,"hillshade-shadow-color":"#7A6A4E",
+              "hillshade-highlight-color":"#FFFBEE","hillshade-accent-color":"#9A8C68"}},
+      {id:"hill-tex",type:"hillshade",source:"dem",
+       paint:{"hillshade-exaggeration":.34,"hillshade-shadow-color":"#615840",
+              "hillshade-highlight-color":"#FFFFFF","hillshade-accent-color":"#8A6A44",
+              "hillshade-illumination-direction":300}},
+      {id:"rd-minor",type:"line",source:"omt","source-layer":"transportation",
+       filter:["!in","class","motorway","trunk","primary","secondary"],
+       layout:{"line-cap":"round","line-join":"round"},
+       paint:{"line-color":"#FFFDF6",
+              "line-width":["interpolate",["linear"],["zoom"],12,.5,15,2.2,18,7]}},
+      {id:"rd-major",type:"line",source:"omt","source-layer":"transportation",
+       filter:["in","class","motorway","trunk","primary","secondary"],
+       layout:{"line-cap":"round","line-join":"round"},
+       paint:{"line-color":"#FFE9A8","line-width":["interpolate",["linear"],["zoom"],12,1.4,15,4.5,18,12],
+              "line-opacity":.95}},
+      {id:"rd-casing-major",type:"line",source:"omt","source-layer":"transportation",
+       filter:["in","class","motorway","trunk","primary"],
+       layout:{"line-cap":"round","line-join":"round"},
+       paint:{"line-color":"#C9A24A","line-width":["interpolate",["linear"],["zoom"],14,.6,18,2],
+              "line-opacity":.5}},
+      {id:"roadlabel",type:"symbol",source:"omt","source-layer":"transportation_name",
+       minzoom:14,layout:{"text-field":["get","name"],"text-font":["Noto Sans Regular"],
+       "symbol-placement":"line","text-size":["interpolate",["linear"],["zoom"],14,10,18,13],
+       "text-letter-spacing":.04},
+       paint:{"text-color":"#5A4A33","text-halo-color":"#FFF9EC","text-halo-width":1.8}}],
+    terrain:{source:"dem",exaggeration:1.5}};}
+
+function fc(feats){return {type:"FeatureCollection",features:feats};}
+function initMap(x,y,st,apn){
+  const wrap=$("#mapwrap");
+  if(typeof maplibregl==="undefined"){ wrap.innerHTML=diagram(x,y,st); return; }
+  wrap.innerHTML=`<div id="map"></div>
+    <div class="toggles">
+      <button class="tg on" data-l="bldglayer,minelayer"><i style="background:#C9BFAC"></i>Buildings</button>
+      <button class="tg on" data-l="delayer"><i style="background:#FFCC00"></i>Dead ends</button>
+      <button class="tg" data-l="narrowlayer"><i style="background:#7A2E9E"></i>Narrow streets</button>
+      <button class="tg" data-l="hazlayer,hazline"><i style="background:#8A5A2B"></i>Landslide &amp; fault</button>
+      <button class="tg" data-l="chiplayer,chipline"><i style="background:#00875A"></i>Chipper areas</button>
+      <button class="tg on" data-l="zonefill,zoneline"><i style="background:#EE3F12"></i>Fire zone</button>
+      <button class="tg act2" id="recentre">Back to my house</button>
+    </div>
+    <div class="legend2">
+      <div><i class="sw" style="background:#FFCC00;border-color:#0E0E0C"></i>
+        <b>Dead end</b><span>A street that only connects to the network at one end. If yours is one,
+        everyone on it leaves the same way you do.</span></div>
+      <div><i class="sw" style="background:#7A2E9E"></i>
+        <b>Narrow street</b><span>On the City's published narrow-streets list. The City's evacuation study
+        found most streets in the Hillside Overlay are under 26 feet wide, which is what stops a fire engine
+        climbing while cars come down.</span></div>
+      <div><i class="sw" style="background:#EE3F12;opacity:.5"></i>
+        <b>Fire zone</b><span>Berkeley Hill Fire Zone 2 or 3. Property here gets a defensible space
+        inspection every year.</span></div>
+      <div><i class="sw" style="background:#8A5A2B"></i>
+        <b>Landslide &amp; fault</b><span>State-mapped landslide zones and Alquist-Priolo earthquake fault
+        zones.</span></div>
+      <div><i class="sw" style="background:#00875A"></i>
+        <b>Chipper area</b><span>Where the Fire Department will collect and chip the branches and brush you
+        cut, free.</span></div>
+      <div><i class="sw" style="background:#D6FF2E"></i>
+        <b>Your house</b><span>The ring, beam and pin all mark the same spot. Your building is drawn in this colour too. Grey blocks are your neighbours.</span></div>
+    </div>
+    <div class="mapnote" id="mapnote">Drag to rotate, scroll to zoom, click a marker.
+      Terrain exaggerated 1.5x.</div>`;
+  let failed=false;
+  try{
+    MAP=new maplibregl.Map({container:"map",style:style(),center:[x,y],zoom:15.0,
+      pitch:64,bearing:-22,maxPitch:80,antialias:true,attributionControl:false});
+  }catch(e){ wrap.innerHTML=diagram(x,y,st); return; }
+  MAP.addControl(new maplibregl.NavigationControl({visualizePitch:true}),"top-right");
+  const bail=()=>{ if(failed) return; failed=true; try{MAP.remove();}catch(_){} wrap.innerHTML=diagram(x,y,st); };
+  /* Do not bail on map errors. The vector source URL ends in /planet, so an earlier
+     regex meant to catch style failures was matching every transient tile error and
+     tearing down a working map. Individual tiles fail all the time and maplibre just
+     retries; only a style that never loads is fatal, and the timeout below catches
+     that. */
+  MAP.on("error",e=>{ if(window.console) console.debug("map:",e&&e.error&&e.error.message); });
+  /* Bail only if the style itself never arrived. The earlier check used MAP.loaded(),
+     which stays false until every tile including the terrain DEM has landed, so a
+     perfectly healthy map on a slow connection was being thrown away and replaced with
+     the fallback diagram after twelve seconds. */
+  setTimeout(()=>{ if(!MAP||!MAP.isStyleLoaded()) bail(); },22000);
+  MAP.on("load",async()=>{
+    await loadIcons(MAP);
+    MAP.setTerrain({source:"dem",exaggeration:1.5});
+    MAP.addSource("zones",{type:"geojson",data:fc(DATA.fireZones.filter(z=>z.a.PLN_HILL_ZONE!==1)
+      .map(z=>({type:"Feature",properties:{z:z.a.PLN_HILL_ZONE},
+                geometry:{type:"Polygon",coordinates:z.r}})))});
+    MAP.addLayer({id:"zonefill",type:"fill",source:"zones",
+      paint:{"fill-color":"#EE3F12","fill-opacity":.045}});
+    MAP.addLayer({id:"zoneline",type:"line",source:"zones",
+      paint:{"line-color":"#D63409","line-width":["interpolate",["linear"],["zoom"],12,2,17,4.5],
+             "line-dasharray":[2.5,1.6],"line-opacity":.95,"line-blur":.3}});
+    /* Narrow streets. The KLD studies' central finding is that most Hillside Overlay
+       streets are under 26 feet, which is what stops an engine climbing while residents
+       drive down. The map showed where roads end; this shows where they pinch. */
+    MAP.addSource("narrow",{type:"geojson",data:fc(DATA.narrow.map(n=>({type:"Feature",
+      properties:{s:n.s},geometry:{type:"LineString",coordinates:n.p}})))});
+    addLayerSafe(MAP,{id:"narrowlayer",type:"line",source:"narrow",
+      layout:{"line-cap":"round","line-join":"round","visibility":"none"},
+      paint:{"line-color":"#7A2E9E","line-width":["interpolate",["linear"],["zoom"],12,1.6,17,5],
+             "line-opacity":.85}});
+    MAP.addSource("chip",{type:"geojson",data:fc(DATA.chipper.map(c=>({type:"Feature",
+      properties:{n:c.a.Number||""},geometry:{type:"Polygon",coordinates:c.r}})))});
+    addLayerSafe(MAP,{id:"chiplayer",type:"fill",source:"chip",
+      layout:{visibility:"none"},paint:{"fill-color":"#00875A","fill-opacity":.12}});
+    addLayerSafe(MAP,{id:"chipline",type:"line",source:"chip",
+      layout:{visibility:"none"},paint:{"line-color":"#00875A","line-width":1.6,"line-opacity":.6}});
+    MAP.addSource("haz",{type:"geojson",data:fc(
+      (DATA.hazards.landslide||[]).map(h=>({type:"Feature",properties:{k:"Landslide zone"},
+        geometry:{type:"Polygon",coordinates:h.r}}))
+      .concat((DATA.hazards.fault||[]).map(h=>({type:"Feature",properties:{k:"Earthquake fault zone"},
+        geometry:{type:"Polygon",coordinates:h.r}}))))});
+    addLayerSafe(MAP,{id:"hazlayer",type:"fill",source:"haz",
+      layout:{visibility:"none"},paint:{"fill-color":"#8A5A2B","fill-opacity":.22}});
+    addLayerSafe(MAP,{id:"hazline",type:"line",source:"haz",
+      layout:{visibility:"none"},paint:{"line-color":"#8A5A2B","line-width":1.4,"line-opacity":.6}});
+    MAP.addSource("de",{type:"geojson",data:fc(DATA.deadEnds.map(d=>({type:"Feature",
+      properties:{s:d.s,b:d.b,z:d.z||""},geometry:{type:"Point",coordinates:[d.x,d.y]}})))});
+    addLayerSafe(MAP,{id:"delayer",type:"symbol",source:"de",
+      layout:{"icon-image":"pin-deadend","icon-anchor":"bottom","icon-allow-overlap":false,
+        "icon-size":["interpolate",["linear"],["zoom"],12,.28,15,.42,18,.6],
+        "symbol-sort-key":1,
+        "text-field":["get","s"],"text-font":["Noto Sans Regular"],"text-size":10.5,
+        "text-anchor":"top","text-offset":[0,.3],"text-optional":true,
+        "text-transform":"uppercase","text-letter-spacing":.06},
+      paint:{"text-color":"#7A5E00","text-halo-color":"#F5F1E8","text-halo-width":1.6}});
+    MAP.addSource("st",{type:"geojson",data:fc(DATA.stations.map(s=>({type:"Feature",
+      properties:{n:s.name,a:s.addr},geometry:{type:"Point",coordinates:[s.x,s.y]}})))});
+    addLayerSafe(MAP,{id:"stlayer",type:"symbol",source:"st",
+      layout:{"icon-image":"pin-station","icon-anchor":"bottom","icon-allow-overlap":true,
+        "icon-size":["interpolate",["linear"],["zoom"],12,.3,18,.6],
+        "symbol-sort-key":0,
+        "text-field":["get","n"],"text-font":["Noto Sans Regular"],"text-size":11,
+        "text-anchor":"top","text-offset":[0,.3],"text-optional":true},
+      paint:{"text-color":"#00603F","text-halo-color":"#F5F1E8","text-halo-width":1.6}});
+    MAP.addSource("me",{type:"geojson",data:fc([{type:"Feature",properties:{},
+      geometry:{type:"Point",coordinates:[x,y]}}])});
+    /* A ring drawn at the point as well as the pin above it. The pin can be read past
+       at a shallow camera angle, when it overlaps a neighbour's roof; the ring sits on
+       the ground and holds the spot from any bearing. */
+    addLayerSafe(MAP,{id:"mering",type:"circle",source:"me",
+      paint:{"circle-radius":["interpolate",["linear"],["zoom"],13,6,15,14,18,34],
+        "circle-color":"#D6FF2E","circle-opacity":.22,
+        "circle-stroke-color":"#0E0E0C","circle-stroke-width":2.2,
+        "circle-stroke-opacity":.9}});
+    addLayerSafe(MAP,{id:"melayer",type:"symbol",source:"me",
+      layout:{"icon-image":"pin-home","icon-anchor":"bottom","icon-allow-overlap":true,
+        "icon-ignore-placement":true,"symbol-sort-key":-1,
+        "icon-size":["interpolate",["linear"],["zoom"],12,.34,15,.62,18,.9]}});
+    loadBuildings(x,y,apn);
+    document.querySelectorAll(".tg[data-l]").forEach(b=>b.onclick=()=>{
+      const on=!b.classList.contains("on");
+      b.classList.toggle("on",on);
+      b.dataset.l.split(",").forEach(id=>{
+        if(MAP.getLayer(id)) MAP.setLayoutProperty(id,"visibility",on?"visible":"none");});});
+    const rc=document.getElementById("recentre");
+    if(rc) rc.onclick=()=>MAP.easeTo({center:[x,y],zoom:15.0,pitch:64,bearing:-22,duration:900});
+    /* Click to open, with a close button, rather than hover-only: a popup you cannot
+       pin is useless on a phone, and this one carries numbers people may want to copy.
+       Berkeley publishes no per-station phone line, which is correct, since nobody
+       should ever dial a fire station in an emergency. So 911 leads and the department
+       numbers follow, and there is deliberately no number here that could be mistaken
+       for an emergency line. */
+    const pop=new maplibregl.Popup({closeButton:true,offset:14,maxWidth:"280px"});
+    const dist=(lng,lat)=>{
+      const R=6371000,p=Math.PI/180;
+      const dy=(lat-y)*p, dx=(lng-x)*p*Math.cos((lat+y)/2*p);
+      const m=Math.round(Math.sqrt(dy*dy+dx*dx)*R);
+      return m>=1000 ? (m/1000).toFixed(1)+" km" : m+" m";};
+
+    MAP.on("click","stlayer",e=>{
+      const f=e.features[0], c=f.geometry.coordinates.slice(), p=f.properties;
+      pop.setLngLat(c).setHTML(
+        `<div class="pt">${esc(p.n)}</div>
+         <div class="pa">${esc(p.a)}</div>
+         <div class="pd">${dist(c[0],c[1])} from your address, straight line</div>
+         <div class="p911">In an emergency call <b>911</b></div>
+         <div class="pl"><span>Fire Dept, non-emergency</span><a href="tel:+15109813473">(510) 981-3473</a></div>
+         <div class="pl"><span>Wildfire and defensible space</span><a href="tel:+15109815620">(510) 981-5620</a></div>
+         <div class="pn">Berkeley does not publish direct numbers for individual stations.</div>`
+      ).addTo(MAP);});
+
+    MAP.on("click","delayer",e=>{
+      const f=e.features[0], c=f.geometry.coordinates.slice(), p=f.properties;
+      pop.setLngLat(c).setHTML(
+        `<div class="pt">${esc(p.s||"Unnamed road")}</div>
+         <div class="pa">${p.b?esc(p.b)+" · ":""}road with one exit</div>
+         <div class="pd">${dist(c[0],c[1])} from your address, straight line${p.z?" · hill fire zone "+esc(p.z):""}</div>
+         <div class="pn">Derived from street centrelines and not checked on the ground. A gate or bollard
+           here may open in an emergency.</div>`
+      ).addTo(MAP);});
+
+    for(const lyr of ["stlayer","delayer"]){
+      MAP.on("mouseenter",lyr,()=>MAP.getCanvas().style.cursor="pointer");
+      MAP.on("mouseleave",lyr,()=>MAP.getCanvas().style.cursor="");}
+  });}
+
+/* A shareable URL is how a tool like this actually travels: one neighbour sends it to
+   the next with the address already in it. Also lets someone bookmark their own house. */
+function setHash(a){ try{ history.replaceState(null,"","#"+encodeURIComponent(a)); }catch(e){} }
+
+function wireResultButtons(addr){
+  const sh=$("#share");
+  if(sh) sh.onclick=async()=>{
+    const u=location.origin+location.pathname+"#"+encodeURIComponent(addr);
+    try{ await navigator.clipboard.writeText(u); sh.textContent="Link copied"; }
+    catch(e){ sh.textContent=u; }
+    setTimeout(()=>sh.textContent="Copy link to this address",2200);};
+  const pr=$("#print");
+  if(pr) pr.onclick=()=>window.print();}
+
+/* Geolocation matters more here than on most pages: the person most likely to want
+   this is standing on the hillside holding a phone. Falls back silently to typing. */
+$("#loc").onclick=async()=>{
+  const b=$("#loc"); const was=b.textContent;
+  if(!navigator.geolocation){ b.textContent="Not available"; setTimeout(()=>b.textContent=was,2000); return; }
+  b.textContent="Locating…"; b.disabled=true;
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const {longitude:lo,latitude:la}=pos.coords;
+    b.textContent=was; b.disabled=false;
+    const d=0.0012;
+    const env=encodeURIComponent(JSON.stringify({xmin:lo-d,ymin:la-d,xmax:lo+d,ymax:la+d,
+      spatialReference:{wkid:4326}}));
+    try{
+      const u=`${ADDR}?geometry=${env}&geometryType=esriGeometryEnvelope&inSR=4326`
+            +`&spatialRel=esriSpatialRelIntersects&outFields=FullAddress,APN&returnGeometry=true`
+            +`&outSR=4326&f=json&resultRecordCount=40`;
+      const r=await fetchT(u,12000);
+      const feats=(r.features||[]).filter(f=>f.geometry);
+      if(!feats.length){ $("#out").innerHTML=`<div class="err">No Berkeley address point near you.
+        This only covers the City of Berkeley.</div>`; return; }
+      let best=feats[0],bd=Infinity;
+      for(const f of feats){
+        const dx=(f.geometry.x-lo), dy=(f.geometry.y-la), m=dx*dx+dy*dy;
+        if(m<bd){bd=m;best=f;}}
+      $("#addr").value=best.attributes.FullAddress;
+      render(best);
+    }catch(e){ $("#out").innerHTML=`<div class="err">Could not reach the City's address service.</div>`; }
+  }, err=>{ b.textContent=err.code===1?"Permission denied":"Could not locate";
+            b.disabled=false; setTimeout(()=>b.textContent=was,2400); },
+  {enableHighAccuracy:true,timeout:10000,maximumAge:60000});};
+
+$("#go").onclick=run;
+$("#addr").addEventListener("keydown",e=>{if(e.key==="Enter") run();});
+if(location.hash.length>1){
+  const a=decodeURIComponent(location.hash.slice(1));
+  $("#addr").value=a; setTimeout(run,60);}
+$("#s1").textContent=DATA.meta.berkeleyNamedRoadDeadEnds;
+$("#s2").textContent=DATA.meta.inHillZone2or3;
+$("#s3").textContent=DATA.meta.segments.toLocaleString();
+$("#foot").innerHTML=`<b style="color:var(--ink);display:block;margin-bottom:8px;
+    font-family:Bricolage Grotesque,sans-serif;font-size:15px;letter-spacing:-.01em">How this works, and where it falls short</b>
+  Everything here is computed from map layers the City of Berkeley publishes: fire zones, landslide and
+  fault zones, fire stations, street centrelines and ${DATA.meta.segments.toLocaleString()} street
+  segments, retrieved ${DATA.meta.generated}. Dead ends are worked out from where street centrelines
+  terminate, which found ${DATA.meta.berkeleyNamedRoadDeadEnds} across Berkeley,
+  ${DATA.meta.inHillZone2or3} of them in hill fire zones 2 and 3.
+  Another ${DATA.meta.boundaryTerminationsDropped} were thrown out. The City's street data stops at
+  the city line, so a street that carries on into Albany or Oakland looks like it ends. Shattuck and
+  Solano both came up that way and neither is a dead end.<br><br>
+  <b style="color:var(--ink)">Three things it gets wrong.</b> A dead end here has not been checked on the
+  ground, so some are service roads or driveways rather than streets. It cannot see gates or bollards that
+  open in an emergency, so a street shown as a dead end may have a second way out. And distance to a fire
+  station is a straight line, not a drive.<br><br>
+  The City's own engineering studies are the real record: Access Impaired Neighborhood Analysis (SB 99) and
+  Evacuation Route Safety, Capacity, and Viability Analysis (AB 747), both by KLD Engineering, early 2024.
+  Basemap © OpenStreetMap contributors, tiles by OpenFreeMap, elevation Mapzen/AWS.
+  Built by a Berkeley resident. Not affiliated with the City of Berkeley.`;
+</script>
+</body>
+</html>
