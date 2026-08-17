@@ -25,6 +25,9 @@ jobs:
       - name: tests
         run: python -m pytest tests/ -v
 
+      - name: cross-check against OpenStreetMap
+        run: python build/validate_osm.py -v
+
       - name: derivation is reproducible
         run: |
           python build/deadends.py

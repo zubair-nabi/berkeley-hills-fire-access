@@ -175,3 +175,61 @@ def test_areas_have_geometry_and_an_exit(areas):
         assert -123 < a["exit"][0] < -122, "exit longitude is not in Berkeley"
         assert 37 < a["exit"][1] < 38, "exit latitude is not in Berkeley"
         assert a["metres"] > 0
+
+
+# --- independent replication -------------------------------------------------
+
+def test_confirmed_against_openstreetmap():
+    """Stability says the answer does not depend on its own tuning. It says
+    nothing about whether the answer is right. This asks a dataset surveyed by
+    different people whether these areas really have one way out.
+
+    93% of checkable areas confirm. The floor is set at 90% so a regression that
+    quietly re-severs the network fails here even if the count stays stable,
+    which is exactly what the old derivation did.
+    """
+    import validate_osm
+    rate, tally, disputed = validate_osm.run()
+    assert rate >= 0.90, (
+        f"only {rate:.0%} of checkable areas confirmed by OSM "
+        f"({tally['disputed']} disputed): {[d[1] for d in disputed][:8]}")
+
+
+def test_panoramic_way_confirmed_by_osm():
+    """The flagship finding, checked in the other dataset.
+
+    It reported three exits until the validator stopped counting the same street
+    as the outside world; two of the three led to Panoramic Place and Dwight
+    Place, both inside the area.
+    """
+    import json as _json
+    import pathlib as _pathlib
+    import validate_osm
+    areas = _json.loads((_pathlib.Path(validate_osm.HERE) / "deadends.json").read_text())
+    area = max((a for a in areas if "PANORAMIC WAY" in a["names"]),
+               key=lambda a: a["metres"])
+    adj, pos, street = validate_osm.load_osm()
+
+    import collections as _c
+    import math as _m
+    cell = 60.0
+    grid = _c.defaultdict(list)
+    for n, (x, y) in pos.items():
+        grid[(int(x // cell), int(y // cell))].append(n)
+
+    def lookup(px, py, r):
+        found, rr = [], int(r // cell) + 1
+        cx, cy = int(px // cell), int(py // cell)
+        for i in range(cx - rr, cx + rr + 1):
+            for j in range(cy - rr, cy + rr + 1):
+                for n in grid.get((i, j), ()):
+                    x, y = pos[n]
+                    if _m.hypot(x - px, y - py) <= r:
+                        found.append(n)
+        return found
+
+    clusters = validate_osm.exits_for(area, adj, pos, street, lookup)
+    assert clusters is not None, "Panoramic Way has no OSM coverage"
+    assert len(clusters) == 1, (
+        f"OSM says Panoramic Way has {len(clusters)} exits: "
+        f"{[sorted(c[1])[:2] for c in clusters]}")

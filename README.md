@@ -127,6 +127,44 @@ snap  4.0 m   areas 302   Berkeley 138
 snap  8.0 m   areas 300   Berkeley 137
 ```
 
+### Checked against an independent survey
+
+Stability proves the answer does not depend on its own tuning. It proves nothing
+about whether the answer is right, and the previous derivation was stable and wrong.
+So each area is also tested inside OpenStreetMap's topology, surveyed by different
+people from different sources.
+
+```
+138 areas checked against OpenStreetMap public roads
+   confirmed single exit   104
+   disputed by OSM           8
+   isolated in OSM           3
+   not covered by OSM       23   (campus, marina and other roads OSM classes as service)
+
+   93% of the 112 checkable areas confirmed
+```
+
+`test_confirmed_against_openstreetmap` fails the build below 90%, so a regression
+that quietly re-severs the network is caught even if the count stays stable.
+
+**What counts as a way out is a judgement, and it dominates the result.** Public
+roads only. Including service roads and fire tracks drops confirmation from 93% to
+41%. The case for excluding them: this is read by a resident with a car during an
+evacuation, for whom a gated fire trail is not a way out, and the City's own street
+layer has no driveway class, so both datasets stay on the same definition. The page
+states this too rather than leaving it implicit.
+
+Two corrections were needed in the validator itself, both found by reading
+disagreements rather than tuning for a number. Panoramic Way reported three exits
+until the check stopped treating the rest of the *same street* as the outside world.
+Grayson St reported two exits 36 m apart both onto Seventh St, which is one
+intersection digitised twice.
+
+The 8 that remain disputed are real disagreements between the two datasets, mostly
+short streets where OSM records a connection the City's centreline does not:
+Middlefield Rd, Woodhaven St, Folger Ave, Sixth St, Olympus Ave, Overlook Rd, Bay
+Tree Ln, Hopkins St. Run `python3 build/validate_osm.py -v` to see them.
+
 ### By council district
 
 | District | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
@@ -166,7 +204,8 @@ python3 build/deadends.py          # derive single-exit areas -> deadends.json
 python3 build/deadends.py --sweep  # the stability check, by hand
 python3 build/build.py             # assemble index.html
 python3 build/districts.py         # regenerate the council district table
-python3 -m pytest tests/           # 24 tests
+python3 build/validate_osm.py -v   # cross-check against OpenStreetMap
+python3 -m pytest tests/           # 26 tests
 ```
 
 CI runs the tests on every push and fails if `deadends.json` or `index.html` are
