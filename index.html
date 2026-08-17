@@ -28,10 +28,21 @@ h1 mark{background:var(--acid);padding:0 .08em}
 .seam p:last-child{margin:0}
 
 .lookup{background:var(--ink);padding:22px;margin:0 0 26px}
+.acwrap{position:relative;flex:1 1 320px;min-width:0}
+#sug{position:absolute;z-index:40;left:0;right:0;top:calc(100% + 4px);margin:0;
+  padding:0;list-style:none;background:var(--card);border:2px solid var(--acid);
+  max-height:290px;overflow-y:auto;box-shadow:0 8px 0 rgba(0,0,0,.25)}
+#sug li{padding:9px 13px;font-family:Azeret Mono,monospace;font-size:13.5px;
+  color:var(--ink);cursor:pointer;border-bottom:1px solid var(--grid)}
+#sug li:last-child{border-bottom:0}
+#sug li[aria-selected="true"],#sug li:hover{background:var(--acid)}
+#sug li b{font-weight:700}
+#sug .none{color:var(--muted);cursor:default;font-style:italic}
+#sug .none:hover{background:transparent}
 .lookup label{display:block;font-family:"Azeret Mono",monospace;font-size:10px;
   letter-spacing:.14em;text-transform:uppercase;color:var(--acid);margin-bottom:9px}
 .row{display:flex;gap:10px;flex-wrap:wrap}
-#addr{flex:1 1 320px;font-family:"Azeret Mono",monospace;font-size:15px;padding:12px 14px;
+#addr{width:100%;box-sizing:border-box;font-family:"Azeret Mono",monospace;font-size:15px;padding:12px 14px;
   border:2px solid var(--acid);background:#1A1A16;color:#fff}
 #addr::placeholder{color:#6B695E}
 button{font-family:"Azeret Mono",monospace;font-size:12px;font-weight:700;letter-spacing:.1em;
@@ -183,13 +194,18 @@ a{color:var(--hot)}
 
 <div class="kick">Berkeley hills</div>
 <h1>How many ways <mark>out</mark>?</h1>
-<p class="lede">Type your address. See the fire zone you are in, the dead-end streets around you,
-and how far the nearest fire station is.</p>
+<p class="lede">Type your address. See whether your street has more than one way out, the fire
+zone you are in, and how far the nearest fire station is.</p>
 
 <div class="lookup">
   <label for="addr">Your Berkeley address</label>
   <div class="row">
-    <input id="addr" placeholder="e.g. 78 Fairlawn Drive" autocomplete="off">
+    <div class="acwrap">
+      <input id="addr" placeholder="e.g. 78 Fairlawn Drive" autocomplete="off"
+             role="combobox" aria-expanded="false" aria-autocomplete="list"
+             aria-controls="sug" aria-haspopup="listbox">
+      <ul id="sug" role="listbox" aria-label="Address suggestions" hidden></ul>
+    </div>
     <button id="go">Show me</button>
     <button id="loc" class="ghost">Use my location</button>
   </div>
@@ -326,12 +342,67 @@ async function fetchT(url,ms=9000){
   if(!r.ok) throw new Error("HTTP "+r.status);
   return r.json();}
 
-async function geocode(q){
-  const safe=q.toUpperCase().replace(/'/g,"''");
-  const where=`UPPER(FullAddress) LIKE '%${safe}%'`;
-  const u=`${ADDR}?where=${encodeURIComponent(where)}&outFields=FullAddress,APN&returnGeometry=true&outSR=4326&f=json&resultRecordCount=8`;
+/* The City writes "1033 MILLER AV" and "1923 NINTH ST". People type "1033 Miller
+   Avenue" and "1923 9th St". The old lookup pushed the whole string into one LIKE,
+   so a single wrong token returned nothing at all: "1532 Olympus Ave" failed
+   against a street the City records as "OLYMPUS AV" with no 1532 on it, and the
+   page just said no match. Match on tokens instead, drop the street type, and
+   accept ordinals written either way. */
+const ST_TYPES=new Set(["ST","STREET","AV","AVE","AVENUE","DR","DRIVE","RD","ROAD",
+  "LN","LANE","CT","COURT","PL","PLACE","WY","WAY","CIR","CIRCLE","TER","TERRACE",
+  "BLVD","BOULEVARD","PATH","WALK","PKWY","PARKWAY"]);
+const ORDINALS=["","FIRST","SECOND","THIRD","FOURTH","FIFTH","SIXTH","SEVENTH",
+  "EIGHTH","NINTH","TENTH","ELEVENTH","TWELFTH","THIRTEENTH","FOURTEENTH",
+  "FIFTEENTH","SIXTEENTH","SEVENTEENTH","EIGHTEENTH","NINETEENTH","TWENTIETH"];
+
+function esq(v){ return v.replace(/'/g,"''"); }
+
+/* One token, possibly matching either spelling of an ordinal. */
+function tokenClause(tok){
+  const alts=new Set([tok]);
+  const numeric=tok.match(/^(\d+)(ST|ND|RD|TH)$/);
+  if(numeric){ const n=+numeric[1]; if(ORDINALS[n]) alts.add(ORDINALS[n]); }
+  const wordIdx=ORDINALS.indexOf(tok);
+  if(wordIdx>0){
+    const n=wordIdx, suf=(n%10===1&&n%100!==11)?"ST":(n%10===2&&n%100!==12)?"ND":
+                         (n%10===3&&n%100!==13)?"RD":"TH";
+    alts.add(n+suf);
+  }
+  return "("+[...alts].map(a=>`UPPER(FullAddress) LIKE '%${esq(a)}%'`).join(" OR ")+")";
+}
+
+function whereFor(q){
+  const toks=q.toUpperCase().replace(/[^A-Z0-9 ]/g," ").split(/\s+/).filter(Boolean);
+  /* The street type is dropped rather than required. Someone who types "Drive"
+     for a road the City calls an avenue should still find it; the suggestions
+     show both and they pick. */
+  const useful=toks.filter(t=>!ST_TYPES.has(t));
+  const kept=useful.length?useful:toks;
+  return kept.map(tokenClause).join(" AND ");
+}
+
+async function queryAddresses(where,limit){
+  if(!where) return [];
+  const u=`${ADDR}?where=${encodeURIComponent(where)}&outFields=FullAddress,APN`
+        +`&returnGeometry=true&outSR=4326&f=json&orderByFields=FullAddress`
+        +`&resultRecordCount=${limit}`;
   const d=await fetchT(u);
   return (d.features||[]).filter(f=>f.geometry);}
+
+async function lookupAddresses(q,limit){
+  let feats=await queryAddresses(whereFor(q),limit);
+  if(feats.length) return feats;
+  /* Nothing matched, so drop the house number and offer the street. Berkeley's
+     address points are sparser than the block ranges suggest: there is no 1532
+     Olympus and no 3102 Dana, and the old behaviour was a blank refusal that
+     left the reader guessing whether they had the street wrong too. Showing the
+     numbers that do exist answers the real question. */
+  const toks=q.toUpperCase().replace(/[^A-Z0-9 ]/g," ").split(/\s+/).filter(Boolean);
+  const words=toks.filter(t=>!/^\d/.test(t) && !ST_TYPES.has(t));
+  if(!words.length || words.length===toks.length) return [];
+  return queryAddresses(words.map(tokenClause).join(" AND "),limit);}
+
+async function geocode(q){ return lookupAddresses(q,8); }
 
 function zoneOf(x,y){
   for(const z of DATA.fireZones){ if(pip(x,y,z.r)) { if(z.a.PLN_HILL_ZONE!==1) return z.a.PLN_HILL_ZONE; } }
@@ -957,8 +1028,77 @@ $("#loc").onclick=async()=>{
             b.disabled=false; setTimeout(()=>b.textContent=was,2400); },
   {enableHighAccuracy:true,timeout:10000,maximumAge:60000});};
 
-$("#go").onclick=run;
-$("#addr").addEventListener("keydown",e=>{if(e.key==="Enter") run();});
+/* Type-ahead. The address points are the only authority on what exists, and the
+   old input made the reader guess the City's spelling with a blank error for a
+   wrong guess. Showing what is actually there is both kinder and shorter. */
+(function autocomplete(){
+  const box=$("#addr"), list=$("#sug");
+  if(!box||!list) return;
+  let items=[], active=-1, seq=0, timer=null, lastQuery="";
+
+  const close=()=>{ list.hidden=true; list.innerHTML=""; items=[]; active=-1;
+    box.setAttribute("aria-expanded","false"); box.removeAttribute("aria-activedescendant"); };
+
+  const choose=i=>{
+    if(i<0||i>=items.length) return;
+    box.value=items[i].attributes.FullAddress;
+    close(); run();};
+
+  const mark=i=>{
+    active=i;
+    [...list.children].forEach((li,n)=>li.setAttribute("aria-selected",n===i?"true":"false"));
+    if(i>=0){ const li=list.children[i];
+      box.setAttribute("aria-activedescendant",li.id); li.scrollIntoView({block:"nearest"}); }
+    else box.removeAttribute("aria-activedescendant");};
+
+  const render=(feats,q)=>{
+    items=feats;
+    if(!feats.length){
+      list.innerHTML=`<li class="none">No Berkeley address matches that</li>`;
+      list.hidden=false; box.setAttribute("aria-expanded","true"); return;}
+    const toks=q.toUpperCase().replace(/[^A-Z0-9 ]/g," ").split(/\s+/).filter(Boolean);
+    list.innerHTML=feats.map((f,n)=>{
+      let label=esc(f.attributes.FullAddress);
+      for(const t of toks){
+        if(t.length<2) continue;
+        label=label.replace(new RegExp("("+t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+")","ig"),"<b>$1</b>");}
+      return `<li id="sug-${n}" role="option" aria-selected="false" data-i="${n}">${label}</li>`;
+    }).join("");
+    list.hidden=false; box.setAttribute("aria-expanded","true"); active=-1;};
+
+  box.addEventListener("input",()=>{
+    const q=box.value.trim();
+    clearTimeout(timer);
+    if(q.length<3){ close(); return; }
+    if(q===lastQuery) return;
+    /* Debounced so a typed address is a few requests, not one per keystroke. */
+    timer=setTimeout(async()=>{
+      lastQuery=q; const mine=++seq;
+      try{ const feats=await lookupAddresses(q,8);
+        if(mine===seq) render(feats,q);
+      }catch(e){ if(mine===seq) close(); }
+    },220);});
+
+  box.addEventListener("keydown",e=>{
+    if(list.hidden){
+      if(e.key==="Enter"){ e.preventDefault(); run(); }
+      return;}
+    if(e.key==="ArrowDown"){ e.preventDefault(); mark(Math.min(active+1,items.length-1)); }
+    else if(e.key==="ArrowUp"){ e.preventDefault(); mark(Math.max(active-1,-1)); }
+    else if(e.key==="Enter"){ e.preventDefault();
+      if(active>=0) choose(active); else { close(); run(); } }
+    else if(e.key==="Escape"){ close(); }});
+
+  list.addEventListener("mousedown",e=>{
+    const li=e.target.closest("li[data-i]");
+    if(li){ e.preventDefault(); choose(+li.dataset.i); }});
+
+  document.addEventListener("click",e=>{
+    if(!e.target.closest(".acwrap")) close();});
+  box.addEventListener("blur",()=>setTimeout(close,120));
+})();
+
+$("#go").onclick=()=>{ const l=$("#sug"); if(l){l.hidden=true;} run(); };
 if(location.hash.length>1){
   const a=decodeURIComponent(location.hash.slice(1));
   $("#addr").value=a; setTimeout(run,60);}

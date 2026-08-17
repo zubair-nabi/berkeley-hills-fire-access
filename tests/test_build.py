@@ -183,3 +183,63 @@ def test_disputed_areas_are_not_drawn_as_solid(built):
     finding claims more than the data supports."""
     assert '["!=",["get","v"],"disputed"]' in built
     assert '["==",["get","v"],"disputed"]' in built
+
+
+# --- address lookup ----------------------------------------------------------
+#
+# The old lookup pushed the whole query into a single LIKE, so one wrong token
+# returned nothing at all and the reader was left guessing which part was wrong.
+# "1532 Olympus Ave", "3102 Dana St", "9th St" and "78 Fairlawn Drive" all failed
+# against addresses the City records as OLYMPUS AV, DANA ST, NINTH ST and
+# FAIRLAWN DR.
+
+def test_lookup_matches_on_tokens_not_the_whole_string(built):
+    assert "function whereFor" in built
+    assert "function tokenClause" in built
+    assert "ST_TYPES" in built, "street-type synonyms are not handled"
+
+
+def test_street_type_synonyms_are_known(built):
+    for pair in ("AVENUE", "DRIVE", "WAY", "BOULEVARD", "TERRACE"):
+        assert f'"{pair}"' in built, f"{pair} missing from the street-type list"
+
+
+def test_ordinals_match_either_spelling(built):
+    """Berkeley records both "1923 NINTH ST" and "1811 63RD ST", so a reader
+    typing 9th must reach NINTH and vice versa."""
+    assert "ORDINALS" in built
+    assert '"NINTH"' in built and '"TWENTIETH"' in built
+
+
+def test_lookup_falls_back_to_the_street(built):
+    """There is no 1532 Olympus and no 3102 Dana. A blank refusal made the reader
+    doubt the street too; offering the numbers that exist answers the question."""
+    assert "async function lookupAddresses" in built
+    assert "queryAddresses" in built
+
+
+def test_autocomplete_is_present_and_accessible(built):
+    assert 'id="sug"' in built and 'role="listbox"' in built
+    assert 'role="combobox"' in built
+    assert 'aria-activedescendant' in built
+    assert 'aria-expanded' in built
+    for key in ("ArrowDown", "ArrowUp", "Escape", "Enter"):
+        assert key in built, f"autocomplete does not handle {key}"
+
+
+def test_autocomplete_is_debounced(built):
+    """One request per keystroke against the City's server would be rude."""
+    assert "clearTimeout(timer)" in built
+    assert "setTimeout(async" in built
+
+
+def test_input_fills_its_wrapper(built):
+    """Wrapping the input for the dropdown detached its flex sizing, which left
+    a 426 px input above a 120 px suggestion list."""
+    assert ".acwrap{position:relative;flex:1 1 320px;min-width:0}" in built
+    assert "#addr{width:100%;box-sizing:border-box" in built
+
+
+def test_intro_copy_matches_the_current_model(built):
+    """The page computes single-exit areas, not dead-end streets."""
+    assert "dead-end streets around you" not in built

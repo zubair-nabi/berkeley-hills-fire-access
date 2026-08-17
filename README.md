@@ -11,6 +11,8 @@ Type an address, get the answer for that address.
 here disagrees with them, they are right. This page draws no evacuation route and
 never will.
 
+Live at <https://zubair-nabi.github.io/berkeley-hills-fire-access/>
+
 ## What it is
 
 One self-contained HTML file. No server, no build step at request time, no tracking,
@@ -236,7 +238,7 @@ python3 build/deadends.py --sweep  # the stability check, by hand
 python3 build/validate_osm.py      # cross-check, writes verdicts.json
 python3 build/build.py             # assemble index.html (needs verdicts.json)
 python3 build/districts.py         # regenerate the council district table
-python3 -m pytest tests/           # 36 tests
+python3 -m pytest tests/           # 44 tests
 ```
 
 CI runs the tests on every push and fails if `deadends.json` or `index.html` are
