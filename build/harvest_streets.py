@@ -94,9 +94,15 @@ def main() -> int:
     # FT_MINUTES then updated the plain file only, so local builds used the new
     # fields and CI used the stale archive and produced different drive times. One
     # artefact, no manual step, no way for the two to diverge.
+    # mtime=0 so identical data compresses to identical bytes. Python's gzip
+    # stamps the current time into the header by default, which would make this
+    # file differ on every run and give the monthly refresh job a change to report
+    # even when the City had published nothing new.
     out = HERE / "streets_raw.json.gz"
-    with gzip.open(out, "wt") as fh:
-        json.dump({"features": feats}, fh, separators=(",", ":"))
+    payload = json.dumps({"features": feats}, separators=(",", ":")).encode()
+    with open(out, "wb") as raw:
+        with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as fh:
+            fh.write(payload)
     print(f"wrote {out.name}  {out.stat().st_size:,} bytes  {len(feats)} segments")
     return 0
 

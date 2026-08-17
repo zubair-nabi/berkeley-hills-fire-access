@@ -213,13 +213,24 @@ def main() -> int:
     data["streets"] = streets
     print(f"    {len(streets)} segments in Berkeley")
 
-    old = json.loads((HERE / "data.json").read_text())
-    data["meta"] = {"generated": time.strftime("%Y-%m-%d"),
-                    "segments": old["meta"]["segments"]}
-
     out = HERE / "data.json"
+    old = json.loads(out.read_text()) if out.exists() else {}
+    data["meta"] = {"generated": time.strftime("%Y-%m-%d"),
+                    "segments": (old.get("meta") or {}).get("segments", 0)}
+
+    # Keep the old date when nothing else moved. The monthly refresh job decides
+    # whether to open a pull request by asking whether this file changed, and a
+    # date stamped on every run would answer yes forever: a PR a month, none of
+    # them saying anything. The date means "when this data was last different",
+    # which is the useful reading anyway.
+    comparable = {k: v for k, v in data.items() if k != "meta"}
+    old_comparable = {k: v for k, v in old.items() if k != "meta"}
+    if comparable == old_comparable and old.get("meta", {}).get("generated"):
+        data["meta"]["generated"] = old["meta"]["generated"]
+        print("\nCity layers unchanged, keeping the existing date")
+
     out.write_text(json.dumps(data, separators=(",", ":")))
-    print(f"\nwrote {out.name}  {out.stat().st_size:,} bytes")
+    print(f"wrote {out.name}  {out.stat().st_size:,} bytes")
     return 0
 
 

@@ -298,13 +298,36 @@ python3 build/drivetime.py         # drive time from each station -> drivetime.j
 python3 build/compare_kld.py -v    # compare against the City's SB 99 study
 python3 build/build.py             # assemble index.html (needs verdicts.json)
 python3 build/districts.py         # regenerate the council district table
-python3 -m pytest tests/           # 49 tests
+python3 -m pytest tests/           # 52 tests
 ```
 
 CI runs the tests on every push and fails if `deadends.json` or `index.html` are
 stale with respect to their inputs. It reads the committed snapshot and never calls
 the City's server, so a refresh is always a deliberate, reviewable commit.
 
+## Keeping it current
+
+The snapshots are dated, and left alone they drift: the City moves a boundary, adds
+a chipper area, re-surveys a street, and this page keeps asserting the old answer
+with a confident date on it.
+
+`.github/workflows/refresh.yml` re-harvests from the City on the first of each
+month, re-derives everything, and opens a pull request **only if something actually
+changed**. Quiet months touch nothing. It opens a pull request rather than pushing,
+because a change in the City's data deserves a person reading it: it might mean a
+street was rebuilt, or it might mean their server had a bad day.
+
+Both harvesters are byte-stable, so "nothing changed" really means nothing changed.
+That took fixing twice: `harvest_layers.py` stamped today's date into
+`meta.generated` on every run, and Python's gzip writes the current time into its
+header. Either alone would have produced an empty pull request every month forever.
+
+The OpenStreetMap snapshot is deliberately **not** refreshed by that job. It is the
+independent yardstick the derivation is measured against, and quietly moving a
+yardstick to keep a number green is the opposite of what it is for.
+
 ## Licence
 
-Code MIT. The underlying data is the City of Berkeley's and carries its own terms.
+MIT, in `LICENSE`. That covers the code only. The map data belongs to the City of
+Berkeley and carries its own terms, and `build/osm_roads.json.gz` is derived from
+OpenStreetMap under the ODbL, © OpenStreetMap contributors.

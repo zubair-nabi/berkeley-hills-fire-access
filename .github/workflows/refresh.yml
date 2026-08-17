@@ -1,0 +1,110 @@
+name: refresh city data
+
+# The snapshots in build/ are dated. Left alone they drift: the City moves a fire
+# zone boundary, adds a chipper area, re-surveys a street, and this page keeps
+# asserting the old answer with a confident date on it. Nobody would notice.
+#
+# So once a month, re-harvest from the City, re-derive everything, and open a pull
+# request ONLY if something actually changed. Quiet months cost one job and touch
+# nothing. The pull request is deliberate: a change in the City's data should be
+# read by a person, not merged by a robot, because it might mean a street was
+# rebuilt or it might mean their server had a bad day.
+#
+# The OpenStreetMap snapshot is NOT refreshed here. It is the independent yardstick
+# the derivation is measured against, and silently moving a yardstick to keep a
+# number green is the opposite of what it is for. Refresh it by hand, deliberately,
+# when you want to.
+
+on:
+  schedule:
+    - cron: "0 11 1 * *"   # 11:00 UTC on the 1st of each month
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install pytest
+
+      # If the City's server is down or slow, fail here and change nothing.
+      # A partial harvest committed over a good snapshot would be worse than
+      # stale data, because it would look current.
+      - name: harvest
+        run: |
+          python build/harvest_streets.py
+          python build/harvest_layers.py
+
+      - name: re-derive
+        run: |
+          python build/deadends.py
+          python build/validate_osm.py
+          python build/drivetime.py
+          python build/build.py
+
+      - name: what changed
+        id: diff
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "City data is unchanged since the last snapshot."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat | tee /tmp/diffstat.txt
+          fi
+
+      # Runs against the newly harvested data, so a City change that breaks an
+      # assumption shows up as a failing check on the pull request rather than as
+      # a silently wrong page.
+      - name: tests
+        if: steps.diff.outputs.changed == 'true'
+        continue-on-error: true
+        id: tests
+        run: |
+          python -m pytest tests/ -q 2>&1 | tail -30 | tee /tmp/tests.txt
+          python build/compare_kld.py | tee -a /tmp/tests.txt
+          python build/districts.py | tee -a /tmp/tests.txt
+
+      - name: open a pull request
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH="refresh/$(date -u +%Y-%m-%d)"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "Refresh City data snapshot $(date -u +%Y-%m-%d)"
+          git push -u origin "$BRANCH"
+          {
+            echo "The City's published layers have changed since the last snapshot."
+            echo
+            echo "Tests on the new data: **${{ steps.tests.outcome }}**. If that says"
+            echo "failure, read it before merging: it means the change broke an"
+            echo "assumption rather than that the harvest went wrong."
+            echo
+            echo '```'
+            cat /tmp/diffstat.txt
+            echo '```'
+            echo
+            echo '<details><summary>tests, KLD comparison, district table</summary>'
+            echo
+            echo '```'
+            cat /tmp/tests.txt || true
+            echo '```'
+            echo '</details>'
+            echo
+            echo "The OpenStreetMap yardstick in build/osm_roads.json.gz was not touched."
+          } > /tmp/body.md
+          gh pr create --title "Refresh City data snapshot $(date -u +%Y-%m-%d)" \
+                       --body-file /tmp/body.md --base main --head "$BRANCH"

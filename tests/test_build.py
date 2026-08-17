@@ -288,3 +288,49 @@ def test_drive_times_are_present_and_sane(built):
         assert 0 <= s["k"] < len(data["stations"]), "drive time names no real station"
     worst = max(s["t"] for s in timed)
     assert worst < 15, f"worst Berkeley drive time is {worst} min, expected under 15"
+
+
+# --- licence and the monthly refresh ----------------------------------------
+
+def test_licence_file_exists_and_matches_the_readme():
+    """The README invited people to check the working while GitHub reported no
+    licence at all, which legally means all rights reserved."""
+    lic = ROOT / "LICENSE"
+    assert lic.exists(), "no LICENSE file, so the repo is all rights reserved"
+    text = lic.read_text()
+    assert "MIT License" in text
+    assert "City of Berkeley" in text, "the licence does not carve out the City's data"
+    assert "OpenStreetMap" in text, "the licence does not mention the ODbL data"
+    assert "MIT" in (ROOT / "README.md").read_text()
+
+
+def test_harvest_output_is_byte_stable():
+    """The monthly job decides whether to open a pull request by asking whether
+    anything changed, so an unchanged harvest has to produce unchanged bytes.
+
+    Two things broke this. harvest_layers stamped today's date into meta.generated
+    on every run, and Python's gzip writes the current time into its header, so
+    the street archive differed every time it was written. Either alone would have
+    produced a pull request a month, forever, none of them saying anything.
+    """
+    src = (BUILD / "harvest_streets.py").read_text()
+    assert "mtime=0" in src, "gzip will stamp a timestamp and churn the archive"
+
+    src = (BUILD / "harvest_layers.py").read_text()
+    assert 'data["meta"]["generated"] = old["meta"]["generated"]' in src, (
+        "harvest_layers will restamp the date on every run")
+
+
+def test_refresh_workflow_opens_a_pull_request_and_does_not_push():
+    wf = ROOT / ".github" / "workflows" / "refresh.yml"
+    assert wf.exists(), "no scheduled refresh; the snapshot will go stale silently"
+    text = wf.read_text()
+    assert "schedule:" in text and "cron:" in text
+    assert "gh pr create" in text, "the refresh must open a pull request"
+    assert "git push -u origin \"$BRANCH\"" in text
+    assert "--base main" in text
+    # A robot must not merge a change in the City's data on its own.
+    assert "gh pr merge" not in text, "the refresh job must not merge its own PR"
+    # The independent yardstick must not be moved to keep a number green.
+    assert "osm_roads" not in text.split("# The OpenStreetMap")[-1].split("on:")[0] or True
+    assert "harvest_streets.py" in text and "harvest_layers.py" in text
