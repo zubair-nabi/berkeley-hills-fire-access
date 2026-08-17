@@ -57,6 +57,23 @@ def test_prose_figures_match_the_data(built):
         f"meta now says {meta.get('singleExitAreas', meta.get('berkeleyNamedRoadDeadEnds'))}")
 
 
+def test_readme_district_table_is_current():
+    """districts.py is the source of truth; the README is a copy of its output.
+
+    The table sat stale for a commit after the derivation changed, quoting counts
+    from a superseded method. A copy that can drift silently is worse than no copy.
+    """
+    import subprocess
+    r = subprocess.run([sys.executable, str(BUILD / "districts.py")],
+                       capture_output=True, text=True, cwd=ROOT)
+    assert r.returncode == 0, r.stderr
+    row = next((l for l in r.stdout.splitlines() if l.startswith("| Areas |")), None)
+    assert row, f"districts.py printed no Areas row:\n{r.stdout}"
+    readme = (ROOT / "README.md").read_text()
+    assert row.strip() in readme.replace("**", ""), (
+        f"README district table is stale.\n  expected: {row.strip()}")
+
+
 def test_readme_quotes_the_current_count():
     """The README is the audit trail. If it disagrees with the derivation, the
     audit trail is wrong, which is worse than having none."""
@@ -65,5 +82,7 @@ def test_readme_quotes_the_current_count():
         pytest.skip("run build/deadends.py first")
     n = len(json.loads(dj.read_text()))
     readme = (ROOT / "README.md").read_text()
+    assert f"{n} single-exit areas" in readme, (
+        f"README does not state the current count of {n} single-exit areas")
     assert str(n) in readme, (
         f"README does not mention the current count of {n} single-exit areas")

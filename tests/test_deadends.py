@@ -84,29 +84,24 @@ def test_results_are_berkeley_only(areas):
 # OpenStreetMap has a degree-1 node 47 m and 40 m from the respective exits. The
 # test was wrong, not the derivation. Check before adding a street here.
 THROUGH_STREETS = [
-    "SHATTUCK AVE", "SOLANO AVE", "MARIN AVE", "PERALTA AVE",
+    "SHATTUCK AVE", "SOLANO AVE", "PERALTA AVE",
     "UNIVERSITY AVE", "SAN PABLO AVE", "ASHBY AVE", "TELEGRAPH AVE",
     "NORTHBRAE TUNNEL", "SACRAMENTO ST", "GILMAN ST",
 ]
 
-# Known unfixed artifact, tracked rather than hidden. The City's centreline has
-# a 126 m hole at the top of Marin Ave: the loose end's nearest neighbouring node
-# is Creston Rd, 126 m away, and there is no same-named partner within 240 m, so
-# neither the name-based bridge nor the missing-junction join reaches it.
-# OpenStreetMap shows Marin Avenue connecting there with degree 2 and 3 nodes and
-# no terminus, so the derivation is wrong and the fix is a bridge wide enough to
-# span 126 m. That distance would also wire genuine cul-de-sacs into whatever
-# street runs behind them, so it is not worth 1 area in 138. Remove the xfail
-# when the harvest picks up the missing segment or a safer repair exists.
-XFAIL = {"MARIN AVE"}
+# Marin Ave was on this list too, and was carried for a while as a known-bad
+# xfail on the theory that a 126 m hole in the centreline had severed it. That
+# was wrong, and wrong because the check was made in the wrong place: OSM was
+# queried around the area's EXIT node, over 100 m from the loose end, where
+# Marin naturally shows degree 2 and 3. Queried at the loose end itself, OSM has
+# Marin Avenue terminating at a degree-1 node 223 m out and joining an unnamed
+# service road that dead-ends after 219 m. Upper Marin Ave really does have one
+# way out. Check at the feature, not near it.
+
 
 
 @pytest.mark.parametrize("street", THROUGH_STREETS)
-def test_through_streets_are_not_areas(areas, street, request):
-    if street in XFAIL:
-        request.node.add_marker(pytest.mark.xfail(
-            reason="known 126 m hole in the centreline; see XFAIL above",
-            strict=True))
+def test_through_streets_are_not_areas(areas, street):
     assert street not in primary_names(areas), (
         f"{street} reported as a single-exit area; the network is severed "
         f"somewhere along it")

@@ -131,22 +131,24 @@ snap  8.0 m   areas 300   Berkeley 137
 
 | District | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Single-exit areas | 28 | 24 | 2 | 4 | 15 | **52** | 9 | 22 |
+| Areas | 19 | 18 | 1 | 2 | 15 | **49** | 9 | 25 |
+| Street behind them | 2.7 km | 4.6 km | 0.0 km | 0.3 km | 1.4 km | 6.1 km | 1.7 km | **7.3 km** |
 
-Counted on the superseded loose-end set and not yet recomputed against the 138.
-The shape is right and the exact figures are not; treat them as indicative until
-rerun. The Redistricting layer's `CouncilMember` field is also out of date, so this
-uses district numbers only.
+Two different answers depending on what you count. District 6 has the most areas.
+District 8 has the most road behind them, because Panoramic Way's 4.5 km sits there
+and one large area outweighs a dozen short cul-de-sacs. Quoting only the count would
+be the more flattering number for the hills and the less true one.
+
+Run `python3 build/districts.py` to regenerate. An area is assigned to the district
+holding most of its street length rather than the one holding its exit junction,
+because exits often sit on the boundary road between two districts, which is exactly
+where an arbitrary choice would flip the count. The Redistricting layer's
+`CouncilMember` field is out of date, so only district numbers are used.
 
 ### Known limits
 
 - **Nothing is checked on the ground.** A gate, bollard or private drive can add a
   way out the map cannot see.
-- **The top of Marin Ave is wrong.** The centreline has a 126 m hole there and Marin
-  reports as single-exit when it is a through street. Bridging 126 m would wire
-  genuine cul-de-sacs into whatever street runs behind them, so it is not worth one
-  area in 138. Tracked as a strict `xfail` so it fails the build if it silently
-  changes.
 - **Straight-line distance is not drive time.** SB 99's access-impaired definition
   depends on a five-minute drive-time service area, which is a harder calculation.
 - **Buildings are drawn at a uniform height** because the City's footprint layer
@@ -163,7 +165,8 @@ python3 build/harvest_streets.py   # only to refresh from the City, writes stree
 python3 build/deadends.py          # derive single-exit areas -> deadends.json
 python3 build/deadends.py --sweep  # the stability check, by hand
 python3 build/build.py             # assemble index.html
-python3 -m pytest tests/           # 22 tests, 1 known xfail
+python3 build/districts.py         # regenerate the council district table
+python3 -m pytest tests/           # 24 tests
 ```
 
 CI runs the tests on every push and fails if `deadends.json` or `index.html` are
