@@ -68,6 +68,7 @@ button:hover{background:#fff;border-color:#fff}
 .tag.hot{background:var(--hot);color:#fff;border-color:var(--hot)}
 .tag.warn{background:var(--acid)}
 .tag.ok{background:var(--ok);color:#fff;border-color:var(--ok)}
+.sub2{display:block;margin:7px 0 0;font-size:12.5px;line-height:1.5;color:var(--muted)}
 .caveat{display:block;margin:10px 0 2px;padding:9px 12px;background:#F5EDD2;
   border-left:4px solid #C8A93A;font-size:13.5px;line-height:1.5;color:#4A3F1C}
 .q{font-family:Azeret Mono,monospace;font-size:10.5px;text-transform:uppercase;
@@ -315,6 +316,25 @@ function metres(a,b,c,d){const p=Math.PI/180,dy=(d-b)*p,dx=(c-a)*p*Math.cos((b+d
    deep lot on a wide street can be 40 m off it. */
 const INSIDE_M=45;
 
+/* Drive time at the address, taken from the nearest street segment that carries
+   one. Straight-line distance is what this replaces: a station 400 m away across
+   a canyon is a several minute drive around it, and SB 99's threshold is a drive
+   time, not a distance. */
+function driveAt(x,y){
+  const p=Math.PI/180, MX=111320*Math.cos(y*p), MY=110574;
+  const px=x*MX, py=y*MY;
+  let best=Infinity, hit=null;
+  for(const st of DATA.streets){
+    if(st.t===undefined) continue;
+    for(let i=0;i<st.p.length-1;i++){
+      const ax=st.p[i][0]*MX,   ay=st.p[i][1]*MY;
+      const bx=st.p[i+1][0]*MX, by=st.p[i+1][1]*MY;
+      const dx=bx-ax, dy=by-ay, L=dx*dx+dy*dy;
+      const t=L===0?0:Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/L));
+      const d=Math.hypot(px-(ax+t*dx),py-(ay+t*dy));
+      if(d<best){ best=d; hit=st; }}}
+  return (hit && best<=120) ? {min:hit.t, station:hit.k, off:Math.round(best)} : null;}
+
 /* Distance from a point to the nearest point of any segment in an area, measured
    against the segments rather than their endpoints. A long block would otherwise
    read as far away from its own middle. */
@@ -529,8 +549,17 @@ function render(feat){
           km(o.a.metres)} of street behind one junction${
           o.a.v==="disputed"?' <span class="q">disputed</span>':""}</li>`).join("")}</ul>`
       : "none within 400 m"}</span></div>
-    <div class="fact"><span class="k">Nearest fire station</span><span class="v">${
-      esc(st.s.name)}, ${esc(st.s.addr)} · <b>${st.m} m</b> in a straight line</span></div>
+    <div class="fact"><span class="k">Nearest fire station</span><span class="v">${(()=>{
+      const dr=driveAt(x,y);
+      if(!dr) return `${esc(st.s.name)}, ${esc(st.s.addr)} · <b>${st.m} m</b> in a straight line`;
+      const s2=DATA.stations[dr.station]||st.s;
+      return `${esc(s2.name)}, ${esc(s2.addr)} · <b>${dr.min.toFixed(1)} min</b> by road`
+        + `<div class="sub2">Along the streets at posted speeds and clear roads, which is an engine
+             on its way to you, not you driving out through traffic. ${st.m} m in a straight line.
+             ${dr.min<=DATA.meta.sb99Minutes
+               ? `Inside the ${DATA.meta.sb99Minutes}-minute fire station service area.`
+               : `Outside the ${DATA.meta.sb99Minutes}-minute fire station service area.`}</div>`;
+    })()}</span></div>
     <div id="mapwrap"></div>
     <div class="sharebar">
       <b>Share or keep</b>

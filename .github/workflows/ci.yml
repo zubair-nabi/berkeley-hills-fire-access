@@ -28,10 +28,14 @@ jobs:
       - name: cross-check against OpenStreetMap
         run: python build/validate_osm.py -v
 
+      - name: compare against the City's SB 99 study
+        run: python build/compare_kld.py
+
       - name: derivation is reproducible
         run: |
           python build/deadends.py
           python build/validate_osm.py
+          python build/drivetime.py
           git diff --exit-code --stat build/deadends.json \
             || (echo "::error::deadends.json is stale, run build/deadends.py and commit"; exit 1)
 

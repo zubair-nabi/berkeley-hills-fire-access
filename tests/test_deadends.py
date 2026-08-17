@@ -233,3 +233,32 @@ def test_panoramic_way_confirmed_by_osm():
     assert len(clusters) == 1, (
         f"OSM says Panoramic Way has {len(clusters)} exits: "
         f"{[sorted(c[1])[:2] for c in clusters]}")
+
+
+def test_agrees_with_the_city_consultants():
+    """The strongest check available: KLD Engineering's SB 99 study, done for the
+    City, names every access impaired neighbourhood it found.
+
+    Exact agreement is impossible by construction. KLD works on residential
+    parcels and counts blocks closed by removable bollards and diverters, which no
+    street centreline records; this page works on street topology and also reports
+    campus and marina roads that front no homes. 61% overlap with 16 of the misses
+    explained by barriers is the honest ceiling for centreline data. The floor is
+    set at 55% so a regression that severs or merges the network shows up here
+    against real ground truth rather than against another computation.
+    """
+    import compare_kld
+    rate, agreed, missed, barrier, extra = compare_kld.run()
+    assert rate >= 0.55, (
+        f"only {rate:.0%} of KLD's access impaired neighbourhoods reproduced; "
+        f"missing {sorted(missed)[:10]}")
+
+
+def test_panoramic_and_the_hill_courts_match_kld():
+    """Spot checks on the ones that matter most: the largest area on the page and
+    the classic hill cul-de-sacs."""
+    import compare_kld
+    _rate, agreed, _m, _b, _e = compare_kld.run()
+    for street in ("PANORAMIC WAY", "CORONA CT", "EL PORTAL CT", "PARNASSUS CT",
+                   "HILL CT", "HIGH CT", "SUMMIT RD", "CAMPUS DR"):
+        assert street in agreed, f"{street} is in KLD's list but not in ours"

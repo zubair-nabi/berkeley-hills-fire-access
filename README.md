@@ -198,6 +198,63 @@ give two answers and this page cannot say which is right. Publishing the 104
 confirmations while keeping the 8 disagreements in a repository file would be
 shipping the convenient half of the result.
 
+### Checked against the City's own consultants
+
+Better than any internal check: KLD Engineering's SB 99 study, commissioned by
+Berkeley, lists by name every access impaired neighbourhood it found. That is the
+authoritative answer to the question this page asks.
+
+```
+KLD Primary AIN neighbourhoods (Berkeley): 105
+this page reproduces                     :  64  (61%)
+KLD has, we do not                       :  41
+   of those, KLD flags a removable barrier: 16
+we have, KLD does not                    :  73
+```
+
+**The two lists cannot match exactly, and the reasons are the interesting part.**
+
+KLD counts residential *parcels* behind a barrier. 16 of the neighbourhoods this
+page misses are ones KLD flags as closed by a removable bollard, gate or
+traffic-calming island: the block is a cul-de-sac for cars while the street
+centreline runs straight through it. Berkeley has many of these, and no centreline
+dataset records them. Dana St, Fulton St, Ellsworth St, Milvia St and Russell St
+are all in that category. This is a limit of the input, not a fault in the
+derivation, and it is the single largest reason to read KLD's report as well.
+
+In the other direction this page reports campus service roads, the marina and
+Cyclotron Rd at the Lab. Those genuinely have one way out; KLD excludes them
+because no home fronts them.
+
+`test_agrees_with_the_city_consultants` fails below 55%.
+
+### Drive time, not straight-line distance
+
+The page used to report distance to the nearest station as a straight line while
+its own footer cited SB 99's five minute **drive time** standard. On a hill those
+differ badly: a station 400 m away across a canyon is a several minute drive
+around it.
+
+`build/drivetime.py` runs a multi-source Dijkstra outward from all seven stations
+over the same repaired network the area analysis uses, honouring one-way
+restrictions, using the layer's own `FT_MINUTES` and falling back to length over
+posted speed for the 720 segments that carry none.
+
+```
+3,603 Berkeley segments reachable
+3,591 of them (100%) within 5 minutes of a station
+median 1.3 min, 90th percentile 2.3 min, max 7.1 min
+```
+
+That every Berkeley street is inside the five minute service area agrees with KLD,
+who write that Berkeley Hills and Thousand Oaks "are within a 5-minute drive of the
+nearest fire station". The access problem in the hills is egress and road width,
+not response time, and the page no longer implies otherwise.
+
+This is free-flow time at posted speeds, so it models an engine on clear roads
+coming to you. It does not model you driving out through evacuation traffic, which
+is the harder problem and the one AB 747 is about. The page says which it is.
+
 ### By council district
 
 | District | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
@@ -220,8 +277,9 @@ where an arbitrary choice would flip the count. The Redistricting layer's
 
 - **Nothing is checked on the ground.** A gate, bollard or private drive can add a
   way out the map cannot see.
-- **Straight-line distance is not drive time.** SB 99's access-impaired definition
-  depends on a five-minute drive-time service area, which is a harder calculation.
+- **Barriers are invisible here.** A bollard, gate or diverter can make a block a
+  cul-de-sac for cars while the centreline runs through it. KLD found 21 such
+  neighbourhoods in Berkeley; this page can find none of them.
 - **Buildings are drawn at a uniform height** because the City's footprint layer
   carries none. Terrain is exaggerated 1.5x so slope reads.
 - **Only the street layer has a harvest script.** The other layers in
@@ -236,9 +294,11 @@ python3 build/harvest_streets.py   # only to refresh from the City, writes stree
 python3 build/deadends.py          # derive single-exit areas -> deadends.json
 python3 build/deadends.py --sweep  # the stability check, by hand
 python3 build/validate_osm.py      # cross-check, writes verdicts.json
+python3 build/drivetime.py         # drive time from each station -> drivetime.json
+python3 build/compare_kld.py -v    # compare against the City's SB 99 study
 python3 build/build.py             # assemble index.html (needs verdicts.json)
 python3 build/districts.py         # regenerate the council district table
-python3 -m pytest tests/           # 44 tests
+python3 -m pytest tests/           # 46 tests
 ```
 
 CI runs the tests on every push and fails if `deadends.json` or `index.html` are

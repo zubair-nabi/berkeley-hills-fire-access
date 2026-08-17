@@ -211,7 +211,9 @@ def main() -> int:
             continue
         for p in f.get("geometry", {}).get("paths", []):
             if len(p) >= 2:
-                streets.append({"s": name, "p": simplify(p)})
+                # OBJECTID travels with the segment so build.py can join the
+                # drive times onto it without matching on geometry.
+                streets.append({"s": name, "i": a.get("OBJECTID"), "p": simplify(p)})
     data["streets"] = streets
     print(f"    {len(streets)} segments in Berkeley")
 

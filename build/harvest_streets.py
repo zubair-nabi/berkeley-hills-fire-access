@@ -24,6 +24,12 @@ The fields fetched are the ones the derivation needs:
   ROADCLASS, MTFCC       classification, used to drop paths and trails
   ONEWAYDIR              one-way pairs, which produce parallel centrelines
   PAV_WIDTH_RD           pavement width, the narrow-street measure at source
+  FT_MINUTES, TF_MINUTES free-flow travel time along the segment in each
+                         direction, and METERS and SPEED behind them. This is
+                         what makes a drive time possible instead of a straight
+                         line, which matters because SB 99 defines an access
+                         impaired neighbourhood by a five minute drive-time
+                         service area, not by distance as the crow flies
 """
 
 import json
@@ -37,7 +43,8 @@ HERE = pathlib.Path(__file__).resolve().parent
 URL = ("https://gis.cityofberkeley.info/arcgis/rest/services"
        "/Planning/Accela/MapServer/3/query")
 FIELDS = ("OBJECTID,FULLNAME,block_addr,MUNILEFT,MUNIRIGHT,F_ZLEV,T_ZLEV,"
-          "ROADCLASS,MTFCC,ONEWAYDIR,PAV_WIDTH_RD")
+          "ROADCLASS,MTFCC,ONEWAYDIR,PAV_WIDTH_RD,"
+          "FT_MINUTES,TF_MINUTES,METERS,SPEED")
 PAGE = 1000
 
 

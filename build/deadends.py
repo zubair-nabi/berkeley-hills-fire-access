@@ -106,6 +106,14 @@ def load_segments():
             segs.append({
                 "name": name,
                 "cls": cls,
+                # Routing attributes, unused by the area analysis and carried so
+                # drivetime.py can run on this exact graph, repairs included.
+                "oid": a.get("OBJECTID"),
+                "ft": a.get("FT_MINUTES"),
+                "tf": a.get("TF_MINUTES"),
+                "oneway": (a.get("ONEWAYDIR") or "").strip().upper(),
+                "meters": a.get("METERS"),
+                "speed": a.get("SPEED"),
                 "block": (a.get("block_addr") or "").strip(),
                 "muni": {(a.get("MUNILEFT") or "").strip(),
                          (a.get("MUNIRIGHT") or "").strip()},

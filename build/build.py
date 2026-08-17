@@ -67,6 +67,27 @@ def main() -> int:
 
     data.pop("deadEnds", None)
     data["areas"] = areas
+    # Drive time from the nearest station, joined onto the display streets. The
+    # page reported a straight line while its own footer cited a five minute
+    # DRIVE TIME standard; on a hill those differ by a lot, because a station
+    # 400 m away across a canyon is a several minute drive around it.
+    dt_path = HERE / "drivetime.json"
+    if not dt_path.exists():
+        print("error: build/drivetime.json missing, run build/drivetime.py first",
+              file=sys.stderr)
+        return 1
+    dt = json.loads(dt_path.read_text())
+    seg = dt["seg"]
+    timed = 0
+    for st in data["streets"]:
+        v = seg.get(str(st.get("i")))
+        if v:
+            st["t"], st["k"] = v[0], v[1]
+            timed += 1
+        st.pop("i", None)
+    data["meta"]["sb99Minutes"] = dt["sb99Minutes"]
+    data["meta"]["streetsTimed"] = timed
+
     data["meta"]["osmConfirmed"] = counts["ok"]
     data["meta"]["osmDisputed"] = counts["disputed"]
     data["meta"]["singleExitAreas"] = len(areas)
@@ -82,6 +103,7 @@ def main() -> int:
           f"{data['meta']['metresBehindSingleExit'] / 1000:.1f} km behind them")
     print(f"  OSM verdicts: {counts['ok']} confirmed, {counts['disputed']} disputed, "
           f"{counts['none']} not checkable")
+    print(f"  drive times on {timed} of {len(data['streets'])} display segments")
     print(f"wrote index.html  {len(out):,} bytes")
     for k, v in sorted((k, len(v)) for k, v in data.items() if isinstance(v, list)):
         print(f"  {k:<12} {v:>6,}")
