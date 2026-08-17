@@ -28,6 +28,7 @@ h1 mark{background:var(--acid);padding:0 .08em}
 .seam p:last-child{margin:0}
 
 .lookup{background:var(--ink);padding:22px;margin:0 0 26px}
+.lede2{font-size:15.5px;color:var(--muted);max-width:64ch;margin:6px 0 0}
 .acwrap{position:relative;flex:1 1 320px;min-width:0}
 #sug{position:absolute;z-index:40;left:0;right:0;top:calc(100% + 4px);margin:0;
   padding:0;list-style:none;background:var(--card);border:2px solid var(--acid);
@@ -193,10 +194,16 @@ a{color:var(--hot)}
 <body>
 <div class="wrap">
 
-<div class="kick">Berkeley hills</div>
+<!-- The eyebrow says what the data covers, the lede says who the page is built
+     for. It used to read "Berkeley hills", which turned a flats resident away at
+     the door before the page had a chance to answer them, and it does answer
+     them: every Berkeley address gets a real result. -->
+<div class="kick">Berkeley</div>
 <h1>How many ways <mark>out</mark>?</h1>
-<p class="lede">Type your address. See whether your street has more than one way out, the fire
-zone you are in, and how far the nearest fire station is.</p>
+<p class="lede">Type any address in Berkeley. You will get whether your street has more than
+one way out, which fire zone you are in, and how long an engine takes to reach you by road.</p>
+<p class="lede2">It is built for the hills, where the answer matters most, and it works
+anywhere in the city.</p>
 
 <div class="lookup">
   <label for="addr">Your Berkeley address</label>
